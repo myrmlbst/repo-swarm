@@ -1,0 +1,12 @@
+{
+  "name": "flyrank-skill-tooling",
+  "private": true,
+  "type": "module",
+  "description": "Shared Playwright/axe-core tooling used by the accessibility-review and frontend-design skills. Not part of the shipped app.",
+  "dependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "playwright": "1.40.0"
+  }
+}

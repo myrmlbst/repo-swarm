@@ -1,0 +1,25 @@
+{
+  "name": "repo-swarm-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API + DB + auth layer for Repo Swarm (no agent logic yet)",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "smoke-test": "tsx scripts/smoke-test.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.12.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

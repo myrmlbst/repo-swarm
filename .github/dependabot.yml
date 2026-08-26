@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # api/, web/, and agents/ are npm workspaces under the root package.json,
+  # sharing one lockfile — Dependabot discovers all three from here.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"

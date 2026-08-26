@@ -1,0 +1,24 @@
+# Dependencies / build output
+node_modules/
+dist/
+.next/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Supabase local dev
+supabase/.branches
+supabase/.temp
+
+# OS / editor
+.DS_Store
+*.log
+
+# Skill scan output (screenshots, reports) — regenerated each run
+.claude/skills/*/last-run/
+
+# Private documentation
+required/*
+ISSUES.md
