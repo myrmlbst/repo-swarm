@@ -1,6 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { env } from "./env";
+import { callClaudeTool } from "./lib/callTool";
 import { agentRegistry } from "./agents";
 import { AGENT_NAMES } from "./types";
 import type {
@@ -10,8 +9,6 @@ import type {
   Task,
   TaskPlan,
 } from "./types";
-
-const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 const taskPlanSchema = z.object({
   tasks: z
@@ -43,10 +40,12 @@ const SUBMIT_PLAN_TOOL = {
             },
           },
           required: ["agent", "task"],
+          additionalProperties: false,
         },
       },
     },
     required: ["tasks"],
+    additionalProperties: false,
   },
 };
 
@@ -72,26 +71,14 @@ what to ask each one; the calling system takes care of running them in the right
 Call submit_task_plan with the resulting plan. Do not include agents that aren't needed.`;
 
 async function planWithClaude(request: AgentRequest): Promise<TaskPlan> {
-  const message = await client.messages.create({
-    model: env.ANTHROPIC_MODEL,
-    max_tokens: 1024,
+  const input = await callClaudeTool({
     system: SYSTEM_PROMPT,
-    tools: [SUBMIT_PLAN_TOOL],
-    tool_choice: { type: "tool", name: "submit_task_plan" },
-    messages: [
-      {
-        role: "user",
-        content: `Repository: ${request.repoUrl}\n\nDeveloper request: ${request.question}`,
-      },
-    ],
+    user: `Repository: ${request.repoUrl}\n\nDeveloper request: ${request.question}`,
+    tool: SUBMIT_PLAN_TOOL,
+    maxTokens: 1024,
   });
 
-  const toolUse = message.content.find((block) => block.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
-    throw new Error("Orchestrator: model response did not include a task plan");
-  }
-
-  const parsed = taskPlanSchema.safeParse(toolUse.input);
+  const parsed = taskPlanSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error(
       `Orchestrator: model returned an invalid task plan: ${parsed.error.message}`,

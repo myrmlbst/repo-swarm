@@ -1,6 +1,6 @@
 # Repo Swarm
 
-An AI software architecture assistant: submit a repo, get back a reviewed, AWS-specific deployment and security architecture from a swarm of specialist agents.
+An AI software assistant: submit a repo, get back a reviewed, AWS-specific deployment and security architecture from a swarm of specialist agents.
 
 RAG and multi-agent systems solve different problems, and they become powerful together:
 
@@ -24,21 +24,23 @@ The capstone requires all of the following concepts. Most are ordinary applicati
 | Rate limiting / quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware                                                                                                                                    |
 | Deployment             | Containerized, deployed on the same ECS/Fargate/RDS pattern the Cloud Agent recommends to others                                                                                                                                               |
 
-**Agent layer**
+**Agent Layer**
 
-| Concept                        | How it shows up                                                                                                                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| LLM integration                | Orchestrator + specialist agents (Code, Cloud, Security, Architecture, Review)                                                                   |
-| Retrieval-augmented generation | Namespaced vector collections (`repository`, `cloud_docs`, `security`, `incidents`) with per-agent retrieval permissions                         |
-| Agent with guardrails          | Prompt-injection resistance against untrusted repo content; redaction of real secrets discovered in code instead of echoing them back            |
-| Model evaluations              | Small labeled golden-repo dataset with known issues, scored for precision/recall — not just cost/latency telemetry                               |
-| Parallel agents                | Code Agent runs first; Cloud, Security, and Incident agents then run in parallel off its output, followed by Architecture Agent and Review Agent |
+| Concept                        | How it shows up                                                                                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM integration                | Orchestrator + specialist agents (Code, Cloud, Security, Architecture, Review)                                                                                         |
+| Retrieval-augmented generation | Voyage embeddings + pgvector on Supabase, namespaced per collection — [`agents/src/lib/rag/`](agents/src/lib/rag/), [DESIGNDOC.md § 6](DESIGNDOC.md#6-retrieval-layer) |
+| Agent with guardrails          | Prompt-injection resistance against untrusted repo content; redaction of real secrets discovered in code instead of echoing them back                                  |
+| Model evaluations              | Small labeled golden-repo dataset with known issues, scored for precision/recall — not just cost/latency telemetry                                                     |
+| Parallel agents                | Code Agent runs first; Cloud and Security agents then run in parallel off its output, followed by Architecture Agent and Review Agent                                  |
 
 Build order: get the vertical slice working end to end first (API → orchestrator → Code Agent → RAG → one downstream agent), then layer in auth/quotas/deployment, then guardrails/evals.
 
-## Current implementation status
+## Current Implementation Status
 
-**Done:** the application layer's API, database, and auth; and, in the agent layer, the orchestrator itself (real Claude-driven task planning + fixed dispatch order), with all five specialist agents currently stubbed out. Submitting a repo via the API still just queues a row — the orchestrator isn't wired into the API yet, but it runs standalone (see `agents/` below).
+**Done:** the application layer's API, database, and auth; and the full agent layer — orchestrator, all five specialist agents, and real RAG retrieval — with real Claude-driven reasoning, running standalone (see `agents/` below). Submitting a repo via the API still just queues a row — the orchestrator isn't wired into the API yet.
+
+RAG is real: Voyage AI embeddings + pgvector on Supabase, chunked and indexed, actually retrieved at query time — not a hardcoded knowledge block in a prompt. See [DESIGNDOC.md § 6](DESIGNDOC.md#6-retrieval-layer) for the full breakdown. The one honest caveat: the `cloud_docs`/`security` collections are a small hand-authored corpus (`agents/knowledge/`, ~8 short docs each), not a real scrape of AWS/OWASP documentation — the retrieval mechanism is real, the corpus behind it is a stand-in.
 
 - `api/` — a standalone Fastify + TypeScript service. Endpoints:
   - `POST /v1/analyses` — submit a GitHub repo URL, returns `{ id, status: "queued" }`
@@ -52,21 +54,31 @@ Build order: get the vertical slice working end to end first (API → orchestrat
 - `web/` — a Next.js frontend: a login screen (email/password + "Continue with GitHub"), and a dashboard to submit a repo URL and see your own analyses with their status. Talks to `api/` directly from the browser using the logged-in session token.
 - `agents/` — a standalone TypeScript module for the agent layer, runnable without `api/`:
   - [`agents/src/orchestrator.ts`](agents/src/orchestrator.ts) — calls Claude (forced tool-use, so the plan is always valid JSON) to decide which specialist agents a request needs and what to ask each, then runs them in the fixed dependency order from [DESIGNDOC.md § 3](DESIGNDOC.md#3-architecture): `code_agent` alone → `{cloud_agent, security_agent}` in parallel → `architecture_agent` → `review_agent`.
-  - [`agents/src/agents/`](agents/src/agents/) — one file per specialist agent (`code_agent`, `cloud_agent`, `security_agent`, `architecture_agent`, `review_agent`); all five are currently stubs that echo their task back rather than doing real analysis.
+  - [`agents/src/agents/`](agents/src/agents/) — one file per specialist agent, each doing real Claude reasoning (forced tool-use, validated with Zod):
+    - `codeAgent.ts` — clones the repo, indexes it into the `repository` collection, retrieves relevant chunks, and extracts structured facts (framework, database, auth, external services, issues).
+    - `cloudAgent.ts` — retrieves from the `cloud_docs` collection and proposes an AWS architecture from the Code Agent's facts.
+    - `securityAgent.ts` — retrieves from the `security` collection and flags production security risks from the Code Agent's facts.
+    - `architectureAgent.ts` — reconciles the Cloud and Security agents' output into one proposal.
+    - `reviewAgent.ts` — critiques that proposal for claims unsupported by the Code Agent's facts. Also sees the developer's original request, so it disputes unsupported _specifics_ (e.g. "ECS Fargate specifically" when nothing demands that over a simpler option) without re-litigating the premise of what was actually asked for (e.g. "deploy this on AWS" isn't a hallucination just because the repo itself doesn't say so).
+  - [`agents/src/lib/rag/`](agents/src/lib/rag/) — the RAG pipeline: `embeddings.ts` (Voyage AI), `vectorStore.ts` (pgvector on Supabase, namespace-scoped search), `chunk.ts`, `retrieve.ts` (multi-query retrieval + merge). See [DESIGNDOC.md § 6](DESIGNDOC.md#6-retrieval-layer).
+  - [`agents/knowledge/`](agents/knowledge/) — the hand-authored `cloud_docs`/`security` corpus; seeded into pgvector by `agents/scripts/seedKnowledge.ts` (`npm run seed-knowledge`).
+  - [`agents/src/lib/`](agents/src/lib/) — also: the Claude tool-calling helper, the repo-clone helper, and two guardrails from [DESIGNDOC.md § 7](DESIGNDOC.md#7-guardrails) — `redact.ts` (regex-based secret redaction on repo content before it's indexed) and prompt-injection resistance (repo content is wrapped in an `<UNTRUSTED_REPOSITORY_CONTENT>` delimiter in `codeAgent.ts`'s system prompt).
   - [`agents/src/runner.ts`](agents/src/runner.ts) — CLI entry point: `npm run dev -- <repo_url> "<question>"`.
 
-**Not built yet:** real logic for any of the five specialist agents (RAG/vector DB retrieval, actual findings), caching, rate limiting/quotas, guardrails, evals, deployment, and wiring the orchestrator into `POST /v1/analyses`.
+**Not built yet:** the `incidents` collection (no agent uses it), caching, rate limiting/quotas, the golden-repo eval suite, deployment, and wiring the orchestrator into `POST /v1/analyses`.
 
-### Getting started
+### Getting Started
 
 Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.
 
-1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql` in the SQL editor.
+1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_rag_pgvector.sql`, in the SQL editor (the second one enables `pgvector` and adds the RAG tables `agents/` uses).
 2. `cd api && cp .env.example .env` and fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` from Project Settings → API.
 3. `cd api && npm install && npm run dev` — starts the API (`PORT` in `.env`, default `3000`).
 4. `cd web && cp .env.local.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same project, same anon key) and `NEXT_PUBLIC_API_BASE_URL` (the API's URL from step 3).
 5. `cd web && npm install && npm run dev` — starts the frontend at `http://localhost:3000` (or wherever Next picks if that port's busy).
-6. `cd agents && cp .env.example .env` and fill in `ANTHROPIC_API_KEY`, then `npm install`. Run the orchestrator standalone with `npm run dev -- <repo_url> "<question>"` — it prints the task plan and each agent's (currently stubbed) result as JSON. Not wired into the API yet, so this is independent of steps 1–5.
+6. `cd agents && cp .env.example .env` and fill in `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` ([voyageai.com](https://www.voyageai.com)), and `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (same values as step 2 — same project). Then `npm install`.
+7. `npm run seed-knowledge` (from `agents/`) — one-time: embeds and indexes the `cloud_docs`/`security` corpus. Re-run any time you edit `agents/knowledge/`.
+8. Run the orchestrator standalone with `npm run dev -- <repo_url> "<question>"` — it prints the task plan and each agent's real (Claude-generated, RAG-backed) result as JSON. Not wired into the API yet, so this is independent of steps 1–5.
 
 Or use the [`scripts/`](scripts/) wrappers instead of steps 2–6:
 
@@ -87,7 +99,7 @@ where `$ACCESS_TOKEN` is the `access_token` from a Supabase `signInWithPassword`
 
 **To enable "Continue with GitHub"**: create a GitHub OAuth App (github.com/settings/developers) with callback URL `https://<project-ref>.supabase.co/auth/v1/callback`; paste its Client ID/Secret into Supabase's Authentication → Providers → GitHub; then add your frontend's `/auth/callback` URL (e.g. `http://localhost:3000/auth/callback`) to Authentication → URL Configuration → Redirect URLs.
 
-## System architecture
+## System Architecture
 
 ```mermaid
 flowchart TD
@@ -157,7 +169,7 @@ flowchart TD
 - Code Agent runs first; Cloud and Security agents fan out in parallel off its output, then Architecture and Review run sequentially.
 - Guardrails sit on the agents that touch untrusted repo content (Code, Security) — filtering prompt injection in and redacting real secrets out.
 
-## Example flow
+## Example Flow
 
 Imagine a developer connects a repository and asks:
 
@@ -581,7 +593,7 @@ So your system starts becoming:
 
 That's actually a pretty sophisticated agent architecture.
 
-## Redis has a legitimate role too
+## Redis
 
 Redis doesn't need to be forced in either — you could use it for several things.
 
@@ -622,6 +634,8 @@ Code Cloud Security
 ```
 
 Now you're demonstrating backend engineering concepts too.
+
+---
 
 ## You could make the system event-driven
 
