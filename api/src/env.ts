@@ -11,6 +11,10 @@ const envSchema = z.object({
     .default(
       "http://localhost:3000,http://localhost:3001,http://localhost:3100",
     ),
+  UPSTASH_REDIS_REST_URL: z.string().url(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1),
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  ANALYSES_QUOTA_PER_MONTH: z.coerce.number().int().positive().default(50),
 });
 
 const parsed = envSchema.safeParse(process.env);

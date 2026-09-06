@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { callClaudeTool } from "../lib/callTool";
-import { withClonedRepo } from "../lib/tempRepo";
+import { withClonedRepo, getRemoteCommitSha } from "../lib/tempRepo";
 import { buildTree, collectIndexableFiles } from "../lib/repoScan";
 import { redactSecrets } from "../lib/redact";
 import { chunkText } from "../lib/rag/chunk";
 import { embedDocuments } from "../lib/rag/embeddings";
 import { upsertChunks, clearNamespace } from "../lib/rag/vectorStore";
 import { retrieveKnowledge } from "../lib/rag/retrieve";
+import { getCachedCodeFacts, setCachedCodeFacts } from "../lib/codeFactsCache";
 import type {
   AgentContext,
   AgentResult,
@@ -149,7 +150,20 @@ export const codeAgent: SpecialistAgent = {
   async run(context: AgentContext): Promise<AgentResult> {
     const { repoUrl } = context.request;
 
-    const { tree, retrieved } = await withClonedRepo(
+    // Cheap (no clone) SHA lookup so a cache hit never pays for cloning,
+    // indexing, or a Claude call at all (DESIGNDOC.md § 6).
+    const remoteSha = await getRemoteCommitSha(repoUrl);
+    const cached = await getCachedCodeFacts(repoUrl, remoteSha);
+    if (cached) {
+      return {
+        agent: "code_agent",
+        task: context.task,
+        summary: cached.summary,
+        data: cached.facts,
+      };
+    }
+
+    const { tree, retrieved, commitSha } = await withClonedRepo(
       repoUrl,
       async (dir, commitSha) => {
         const namespace = `${repoUrl}@${commitSha}`;
@@ -177,7 +191,7 @@ export const codeAgent: SpecialistAgent = {
             queries: [...RETRIEVAL_QUERIES, context.task],
           });
 
-          return { tree, retrieved };
+          return { tree, retrieved, commitSha };
         } finally {
           // `repository` chunks are per-run working storage, not a persistent
           // cache (DESIGNDOC.md § 6) — clear them once this run is done so
@@ -217,6 +231,11 @@ export const codeAgent: SpecialistAgent = {
       external_services: parsed.data.external_services ?? [],
       issues: parsed.data.issues ?? [],
     };
+
+    await setCachedCodeFacts(repoUrl, commitSha, {
+      summary: parsed.data.summary,
+      facts: data,
+    });
 
     return {
       agent: "code_agent",

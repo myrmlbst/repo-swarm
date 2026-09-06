@@ -2,6 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAuth } from "../lib/auth";
+import { rateLimit } from "../lib/rateLimit";
+import { identityFor } from "../lib/identity";
+import { checkAndIncrementQuota } from "../lib/quota";
 
 const createAnalysisSchema = z.object({
   repo_url: z
@@ -15,13 +18,21 @@ const createAnalysisSchema = z.object({
 export async function analysisRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/analyses",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       const parsed = createAnalysisSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
           .code(400)
           .send({ error: parsed.error.flatten().fieldErrors });
+      }
+
+      const quota = await checkAndIncrementQuota(identityFor(request.user!));
+      if (!quota.allowed) {
+        return reply
+          .code(429)
+          .header("Retry-After", String(quota.retryAfterSeconds))
+          .send({ error: "Monthly analysis quota exceeded" });
       }
 
       const { data, error } = await supabaseAdmin
@@ -45,7 +56,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/v1/analyses",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("analyses")
@@ -64,7 +75,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>(
     "/v1/analyses/:id",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("analyses")

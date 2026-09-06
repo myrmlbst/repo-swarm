@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAuth } from "../lib/auth";
+import { rateLimit } from "../lib/rateLimit";
 import { generateApiKey } from "../lib/apiKeys";
 
 const createApiKeySchema = z.object({
@@ -12,7 +13,7 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
   // Only a logged-in session (not another API key) may mint new API keys.
   app.post(
     "/v1/api-keys",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       if (request.user!.authMethod !== "session") {
         return reply.code(403).send({
@@ -52,7 +53,7 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/v1/api-keys",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("api_keys")
@@ -71,7 +72,7 @@ export async function apiKeyRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string } }>(
     "/v1/api-keys/:id",
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, rateLimit] },
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("api_keys")

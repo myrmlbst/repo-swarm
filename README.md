@@ -36,7 +36,6 @@ The capstone requires all of the following concepts. Most are ordinary applicati
 
 Build order: get the vertical slice working end to end first (API → orchestrator → Code Agent → RAG → one downstream agent), then layer in auth/quotas/deployment, then guardrails/evals.
 
-
 ### Getting Started
 
 Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.

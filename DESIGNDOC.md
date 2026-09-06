@@ -55,7 +55,11 @@ findings
   title, detail, source_refs (jsonb)
 
 usage_counters
-  api_key_id (fk), period_start, analyses_used, tokens_used
+  api_key_id (fk, nullable), user_id (fk, nullable), period_start,
+  analyses_used, tokens_used
+  -- exactly one of api_key_id/user_id is set per row (check constraint) —
+  -- session-based web dashboard usage is quota-capped too, not just
+  -- programmatic API-key access; see § 5.
 ```
 
 `analysis_runs` is what the observability dashboard in the README reads from. `findings` is what the Review Agent's critique gets attached to (a finding can be flagged `disputed` by the Review Agent rather than deleted — keep the disagreement visible instead of silently dropping it).
@@ -74,6 +78,12 @@ All routes except the webhook require an API key. The webhook is verified via Gi
 
 Rate limiting is enforced at the API layer, keyed on `api_key_id`, backed by Redis counters (`INCR` + `EXPIRE`, not an in-memory counter — the app needs to run as more than one instance). Quota exceeded returns `429` with a `Retry-After` header, not a silent drop.
 
+**Status: implemented**, keyed more broadly than originally scoped here — on the request's `Identity` (`api/src/lib/identity.ts`): an API key when one was used, otherwise the logged-in user, so session-based web dashboard usage is rate-limited/quota-capped too, not just programmatic access (`usage_counters` gained a nullable `user_id` column alongside `api_key_id` to support this — see § 4).
+
+- **Rate limiting:** `api/src/lib/rateLimit.ts` — Upstash Redis `INCR`/`EXPIRE` per identity per rolling minute, applied to every authenticated route.
+- **Quotas:** `api/src/lib/quota.ts` + `check_and_increment_quota` (`supabase/migrations/0003_usage_counters.sql`) — an atomic Postgres function (row-locked via `for update`, so two concurrent requests for the same identity+period can't both read "under limit" and both get through), checked in `POST /v1/analyses`.
+- Verified live against the real Supabase + Upstash backends: the 4th request in a rate-limit window and the 3rd analysis in a quota period were both correctly rejected with `429` + a real `Retry-After`.
+
 ## 6. Retrieval Layer
 
 Four namespaced collections, as described in the README: `repository`, `cloud_docs`, `security`, `incidents`. Each analysis gets its own `repository` namespace (or partition key) so one user's code is never retrievable by another user's query — this is the one place a RAG bug becomes a data-isolation bug, so it gets a test of its own: assert that a query scoped to analysis A never returns chunks from analysis B.
@@ -83,11 +93,13 @@ Four namespaced collections, as described in the README: `repository`, `cloud_do
 - **Embeddings:** Voyage AI (`voyage-3`, 1024 dims) — `agents/src/lib/rag/embeddings.ts`. Claude has no embeddings endpoint, so this is a separate provider/API key (`VOYAGE_API_KEY`).
 - **Vector store:** pgvector on the same Supabase Postgres project as `api/` — `supabase/migrations/0002_rag_pgvector.sql` adds the `vector` extension, a `rag_chunks` table (`collection`, `namespace`, `source_path`, `content`, `embedding`), an HNSW index, and a `match_rag_chunks` SQL function that scopes cosine-similarity search to one `collection` + `namespace` pair — this is what enforces the isolation property above; a query literally cannot see rows outside its own namespace, not just "shouldn't."
 - **Chunking:** paragraph-aware, ~1500 chars with ~150 char overlap, dependency-free (`agents/src/lib/rag/chunk.ts`) — not token-based, good enough at this scale.
-- **`repository`:** `code_agent` (`agents/src/agents/codeAgent.ts`) shallow-clones the repo, indexes up to ~200 files (binaries/lockfiles/minified assets excluded, ~400K char budget) under a namespace keyed by `<repo_url>@<commit_sha>`, runs a handful of canonical retrieval queries (README § 2's examples: "database connection configuration", "where API keys are loaded", etc.) plus the orchestrator's task text, and deletes the namespace when done — these chunks are per-run working storage, not a persistent cache (see caching note below).
+- **`repository`:** `code_agent` (`agents/src/agents/codeAgent.ts`) shallow-clones the repo, indexes up to ~200 files (binaries/lockfiles/minified assets excluded, ~400K char budget) under a namespace keyed by `<repo_url>@<commit_sha>`, runs a handful of canonical retrieval queries (README § 2's examples: "database connection configuration", "where API keys are loaded", etc.) plus the orchestrator's task text, and deletes the namespace when done — these chunks are per-run working storage, not a persistent cache (see caching note below, which caches the _output_ of this whole process, not these chunks).
 - **`cloud_docs` / `security`:** a small hand-authored corpus (`agents/knowledge/cloud_docs/*.md`, `agents/knowledge/security/*.md` — 8 short docs each, not a scrape of real AWS/OWASP documentation), seeded once into the shared `global` namespace by `agents/scripts/seedKnowledge.ts` (`npm run seed-knowledge`, idempotent — replaces the namespace rather than appending). `cloud_agent`/`security_agent` retrieve from it instead of reasoning from a hardcoded prompt string.
 - **Isolation test:** `agents/src/lib/rag/vectorStore.test.ts` (`npm test`) — writes distinct content to two namespaces and asserts a search scoped to one never returns the other's content. Integration test against the real Supabase/Voyage backends, needs `agents/.env` filled in.
 
 Cache the _derived structured facts_ per repo (the JSON blob the Code Agent produces — framework, database, auth method, issues list) in Redis, keyed by repo commit SHA. Don't cache raw agent Q&A pairs; natural-language queries vary too much for exact-match caching to pay off.
+
+**Status: implemented** — `agents/src/lib/codeFactsCache.ts`. `code_agent` gets the commit SHA via `git ls-remote` (no clone needed) before doing anything else, checks Redis, and on a hit returns immediately — skipping the clone, the indexing pass, and the Claude call entirely. Since a commit's content is immutable, the cache is correct forever; the 30-day TTL exists only to bound storage, not for correctness. Verified live: a repeat run against the same commit dropped from 29.98s to 4.58s with byte-identical output.
 
 ## 7. Guardrails
 
@@ -123,6 +135,7 @@ Containerize the API + agent workers separately (the agent workers are the long-
 2. **Full agent graph.** Add Security, Architecture, Review agents; wire up the sequential→parallel→sequential dependency correctly.
    - Status: done — all three implemented for real in `agents/src/agents/`, dispatched by the orchestrator in the correct order.
 3. **Productization.** Auth, API keys, Postgres persistence, rate limiting/quotas, Redis caching.
+   - Status: done, except Postgres persistence of _analysis results_ specifically — `analyses` rows exist but still just get `queued` (see step 1's status). Auth, API keys, rate limiting/quotas (§ 5), and Redis caching (§ 6) are all implemented and verified live.
 4. **Quality layer.** Guardrails (injection test + redaction), golden-repo eval suite wired into CI.
 5. **Deployment.** Containerize and deploy for real; wire up the trace/cost dashboard.
 6. **Stretch.** GitHub PR webhook + auto-comment loop; MCP servers in place of direct SDK calls.

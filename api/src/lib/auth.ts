@@ -6,6 +6,8 @@ export interface AuthUser {
   id: string;
   email: string | null;
   authMethod: "session" | "api_key";
+  /** The api_keys row id — set only when authMethod is "api_key". Used to key rate limits/quotas per key rather than per user. */
+  apiKeyId?: string;
 }
 
 declare module "fastify" {
@@ -27,7 +29,7 @@ function extractBearerToken(request: FastifyRequest): string {
 async function resolveApiKey(token: string): Promise<AuthUser> {
   const { data, error } = await supabaseAdmin
     .from("api_keys")
-    .select("user_id, revoked_at")
+    .select("id, user_id, revoked_at")
     .eq("key_hash", hashApiKey(token))
     .maybeSingle();
 
@@ -45,6 +47,7 @@ async function resolveApiKey(token: string): Promise<AuthUser> {
     id: userData.user.id,
     email: userData.user.email ?? null,
     authMethod: "api_key",
+    apiKeyId: data.id,
   };
 }
 
