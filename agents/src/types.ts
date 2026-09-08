@@ -45,9 +45,22 @@ export interface SpecialistAgent {
   run(context: AgentContext): Promise<AgentResult>;
 }
 
+/**
+ * Per-agent timing for `analysis_runs` (DESIGNDOC.md § 4) — recorded around
+ * each agent's `run()` call in orchestrator.ts. Only covers the success
+ * path: if an agent throws, `runOrchestrator` itself rejects and there's no
+ * partial `runs` array to return (see orchestrator.ts's module comment).
+ */
+export interface AgentRunRecord {
+  agent: AgentName;
+  startedAt: string;
+  finishedAt: string;
+}
+
 export interface OrchestratorResult {
   plan: TaskPlan;
   results: AgentResult[];
+  runs: AgentRunRecord[];
 }
 
 /** Matches the `findings` table's severity enum in DESIGNDOC.md § 4. */

@@ -18,7 +18,8 @@ const judgeSchema = z.object({
 
 const SCORE_TOOL = {
   name: "score_findings",
-  description: "Score how well the actual findings cover the hand-labeled expected findings.",
+  description:
+    "Score how well the actual findings cover the hand-labeled expected findings.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -30,7 +31,8 @@ const SCORE_TOOL = {
             expected_index: { type: "number" },
             matched: {
               type: "boolean",
-              description: "true if some actual finding conveys this same underlying issue.",
+              description:
+                "true if some actual finding conveys this same underlying issue.",
             },
           },
           required: ["expected_index", "matched"],
@@ -45,7 +47,8 @@ const SCORE_TOOL = {
             actual_index: { type: "number" },
             supported_by_expected: {
               type: "boolean",
-              description: "true if this finding corresponds to one of the expected findings.",
+              description:
+                "true if this finding corresponds to one of the expected findings.",
             },
           },
           required: ["actual_index", "supported_by_expected"],
@@ -117,10 +120,14 @@ ${actual.map((f, i) => `${i}. ${f}`).join("\n")}`;
 
   const parsed = judgeSchema.safeParse(input);
   if (!parsed.success) {
-    throw new Error(`scoreFindings: judge returned invalid output: ${parsed.error.message}`);
+    throw new Error(
+      `scoreFindings: judge returned invalid output: ${parsed.error.message}`,
+    );
   }
 
-  const matchedExpectedCount = parsed.data.expected_matches.filter((m) => m.matched).length;
+  const matchedExpectedCount = parsed.data.expected_matches.filter(
+    (m) => m.matched,
+  ).length;
   const supportedActualCount = parsed.data.actual_matches.filter(
     (m) => m.supported_by_expected,
   ).length;

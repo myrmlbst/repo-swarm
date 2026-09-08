@@ -5,6 +5,7 @@ import { AGENT_NAMES } from "./types";
 import type {
   AgentRequest,
   AgentResult,
+  AgentRunRecord,
   OrchestratorResult,
   Task,
   TaskPlan,
@@ -92,26 +93,44 @@ function taskFor(tasks: Task[], agent: Task["agent"]): Task | undefined {
   return tasks.find((t) => t.agent === agent);
 }
 
+/** Wraps one agent's run() with timing, recorded into `runs`. */
+async function runTimed(
+  task: Task,
+  request: AgentRequest,
+  priorResults: AgentResult[],
+  runs: AgentRunRecord[],
+): Promise<AgentResult> {
+  const startedAt = new Date().toISOString();
+  const result = await agentRegistry[task.agent].run({
+    request,
+    task: task.task,
+    priorResults,
+  });
+  runs.push({
+    agent: task.agent,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+  });
+  return result;
+}
+
 /**
  * Runs the specialist agents in the fixed dependency order from
  * DESIGNDOC.md § 3: code_agent (alone) -> {cloud_agent, security_agent} (in
  * parallel) -> architecture_agent -> review_agent. Any agent not present in
- * the plan is simply skipped.
+ * the plan is simply skipped. If any agent throws, this rejects — there's
+ * no partial-failure handling yet (see AgentRunRecord's doc comment).
  */
 async function executePlan(
   request: AgentRequest,
   plan: TaskPlan,
-): Promise<AgentResult[]> {
+): Promise<{ results: AgentResult[]; runs: AgentRunRecord[] }> {
   const results: AgentResult[] = [];
+  const runs: AgentRunRecord[] = [];
 
   const codeTask = taskFor(plan.tasks, "code_agent");
   if (codeTask) {
-    const result = await agentRegistry.code_agent.run({
-      request,
-      task: codeTask.task,
-      priorResults: results,
-    });
-    results.push(result);
+    results.push(await runTimed(codeTask, request, results, runs));
   }
 
   const parallelTasks = [
@@ -121,44 +140,28 @@ async function executePlan(
 
   if (parallelTasks.length > 0) {
     const parallelResults = await Promise.all(
-      parallelTasks.map((t) =>
-        agentRegistry[t.agent].run({
-          request,
-          task: t.task,
-          priorResults: results,
-        }),
-      ),
+      parallelTasks.map((t) => runTimed(t, request, results, runs)),
     );
     results.push(...parallelResults);
   }
 
   const architectureTask = taskFor(plan.tasks, "architecture_agent");
   if (architectureTask) {
-    const result = await agentRegistry.architecture_agent.run({
-      request,
-      task: architectureTask.task,
-      priorResults: results,
-    });
-    results.push(result);
+    results.push(await runTimed(architectureTask, request, results, runs));
   }
 
   const reviewTask = taskFor(plan.tasks, "review_agent");
   if (reviewTask) {
-    const result = await agentRegistry.review_agent.run({
-      request,
-      task: reviewTask.task,
-      priorResults: results,
-    });
-    results.push(result);
+    results.push(await runTimed(reviewTask, request, results, runs));
   }
 
-  return results;
+  return { results, runs };
 }
 
 export async function runOrchestrator(
   request: AgentRequest,
 ): Promise<OrchestratorResult> {
   const plan = await planWithClaude(request);
-  const results = await executePlan(request, plan);
-  return { plan, results };
+  const { results, runs } = await executePlan(request, plan);
+  return { plan, results, runs };
 }

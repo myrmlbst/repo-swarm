@@ -27,14 +27,14 @@ The capstone requires all of the following concepts. Most are ordinary applicati
 
 **Application Layer**
 
-| Concept                | How it shows up                                                                                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API endpoints          | [`api/src/routes/analyses.ts`](api/src/routes/analyses.ts), [`api/src/routes/apiKeys.ts`](api/src/routes/apiKeys.ts) — `POST /analyses`, `GET /analyses/{id}`, `GET /analyses/{id}/findings` and the GitHub webhook receiver are still planned |
-| Database               | Postgres via Supabase — [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) (`api_keys`, `analyses` so far; `findings`/`analysis_runs` land with the agent layer)                                                         |
-| Authentication         | Supabase Auth (session JWT) + API keys for programmatic access — [`api/src/lib/auth.ts`](api/src/lib/auth.ts), [`api/src/lib/apiKeys.ts`](api/src/lib/apiKeys.ts)                                                                              |
-| Caching                | Redis in front of the API/DB — cache structured per-repo facts, not raw Q&A strings (low hit rate on natural-language queries)                                                                                                                 |
-| Rate limiting / quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware                                                                                                                                    |
-| Deployment             | Containerized, deployed on the same ECS/Fargate/RDS pattern the Cloud Agent recommends to others                                                                                                                                               |
+| Concept                | How it shows up                                                                                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API endpoints          | [`api/src/routes/analyses.ts`](api/src/routes/analyses.ts), [`api/src/routes/apiKeys.ts`](api/src/routes/apiKeys.ts) — `POST /analyses`, `GET /analyses/{id}`, `GET /analyses/{id}/findings`, `GET /analyses/{id}/trace` all implemented; the GitHub webhook receiver is still planned |
+| Database               | Postgres via Supabase — [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) (`api_keys`, `analyses` so far; `findings`/`analysis_runs` land with the agent layer)                                                                                                 |
+| Authentication         | Supabase Auth (session JWT) + API keys for programmatic access — [`api/src/lib/auth.ts`](api/src/lib/auth.ts), [`api/src/lib/apiKeys.ts`](api/src/lib/apiKeys.ts)                                                                                                                      |
+| Caching                | Redis in front of the API/DB — cache structured per-repo facts, not raw Q&A strings (low hit rate on natural-language queries)                                                                                                                                                         |
+| Rate limiting / quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware                                                                                                                                                                            |
+| Deployment             | Containerized, deployed on the same ECS/Fargate/RDS pattern the Cloud Agent recommends to others                                                                                                                                                                                       |
 
 **Agent Layer**
 
@@ -52,22 +52,24 @@ Build order: get the vertical slice working end to end first (API → orchestrat
 
 Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.
 
-1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_rag_pgvector.sql`, in the SQL editor (the second one enables `pgvector` and adds the RAG tables `agents/` uses).
-2. `cd api && cp .env.example .env` and fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` from Project Settings → API.
+Prerequisites also: an [Upstash](https://upstash.com) Redis database (free tier) — backs rate limiting, quotas, and `code_agent`'s caching.
+
+1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql` through `0004_analysis_results.sql`, in order, in the SQL editor (`0002` enables `pgvector` for RAG, `0003` adds quota tracking, `0004` adds `analysis_runs`/`findings` and the `analyses.proposal`/`review_approved` columns).
+2. `cd api && cp .env.example .env` and fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API) and `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (from your Upstash database).
 3. `cd api && npm install && npm run dev` — starts the API (`PORT` in `.env`, default `3000`).
 4. `cd web && cp .env.local.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same project, same anon key) and `NEXT_PUBLIC_API_BASE_URL` (the API's URL from step 3).
 5. `cd web && npm install && npm run dev` — starts the frontend at `http://localhost:3000` (or wherever Next picks if that port's busy).
-6. `cd agents && cp .env.example .env` and fill in `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` ([voyageai.com](https://www.voyageai.com)), and `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (same values as step 2 — same project). Then `npm install`.
+6. `cd agents && cp .env.example .env` and fill in `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` ([voyageai.com](https://www.voyageai.com)), `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (same project as step 2), and `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (same Upstash database as step 2). Then `npm install`.
 7. `npm run seed-knowledge` (from `agents/`) — one-time: embeds and indexes the `cloud_docs`/`security` corpus. Re-run any time you edit `agents/knowledge/`.
-8. Run the orchestrator standalone with `npm run dev -- <repo_url> "<question>"` — it prints the task plan and each agent's real (Claude-generated, RAG-backed) result as JSON. Not wired into the API yet, so this is independent of steps 1–5.
+8. `npm run worker` (from `agents/`) — starts the queue consumer that actually processes analyses submitted through the API (step 3's `POST /v1/analyses` just queues them; this is what picks them up). Needs to be running for the web app or a direct `curl` to `api/` to produce a real result — see [System Architecture](#system-architecture) below.
 
-Or use the [`scripts/`](scripts/) wrappers instead of steps 2–6:
+Or use the [`scripts/`](scripts/) wrappers instead of steps 2–6 and 8:
 
 - `scripts/setup.sh` — installs dependencies in `api/`, `web/`, and `agents/`, and creates any missing `.env` files from their `.example` counterparts (never overwrites an existing one).
-- `scripts/dev.sh` — starts the `api/` and `web/` dev servers together (Ctrl-C stops both).
-- `scripts/agents.sh <repo_url> "<question>"` — runs the orchestrator standalone, same as `agents/`'s `npm run dev`.
+- `scripts/dev.sh` — starts `api/`, `web/`, **and** the `agents/` worker together (Ctrl-C stops all three) — this is the one that gives you the actual working product.
+- `scripts/agents.sh <repo_url> "<question>"` — runs the orchestrator standalone via `agents/`'s `npm run dev`, independent of the API/queue/worker entirely — useful for testing agent changes directly.
 
-Open the frontend, sign up with email/password (or GitHub, once configured — see below), and submit a repo URL. To drive the API directly instead:
+Open the frontend, sign up with email/password (or GitHub, once configured — see below), and submit a repo URL — with the worker running, it'll actually process and the dashboard will show a real result once it completes (usually 1-2 minutes). To drive the API directly instead:
 
 ```bash
 curl -X POST http://localhost:3000/v1/analyses \

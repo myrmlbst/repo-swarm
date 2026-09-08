@@ -5,6 +5,11 @@ import { requireAuth } from "../lib/auth";
 import { rateLimit } from "../lib/rateLimit";
 import { identityFor } from "../lib/identity";
 import { checkAndIncrementQuota } from "../lib/quota";
+import { redis } from "../lib/redisClient";
+
+// Must match the key agents/src/worker.ts pops from — the two packages
+// don't share code, so this is duplicated by name, not import.
+const QUEUE_KEY = "analysis_queue";
 
 const createAnalysisSchema = z.object({
   repo_url: z
@@ -14,6 +19,23 @@ const createAnalysisSchema = z.object({
       message: "repo_url must be a github.com repository URL",
     }),
 });
+
+const ANALYSIS_COLUMNS =
+  "id, repo_url, status, proposal, review_approved, created_at, completed_at";
+
+/** Returns true if `analysisId` exists and belongs to `userId`. */
+async function ownsAnalysis(
+  userId: string,
+  analysisId: string,
+): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("analyses")
+    .select("id")
+    .eq("id", analysisId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data !== null;
+}
 
 export async function analysisRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -50,6 +72,17 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(500).send({ error: "Failed to create analysis" });
       }
 
+      try {
+        await redis.lpush(QUEUE_KEY, data.id);
+      } catch (err) {
+        // The analysis row exists either way; log loudly since a failed
+        // push means it'll sit "queued" forever with nothing to pick it up.
+        request.log.error(
+          err,
+          `failed to queue analysis ${data.id} for processing`,
+        );
+      }
+
       return reply.code(201).send(data);
     },
   );
@@ -60,7 +93,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("analyses")
-        .select("id, repo_url, status, created_at, completed_at")
+        .select(ANALYSIS_COLUMNS)
         .eq("user_id", request.user!.id)
         .order("created_at", { ascending: false });
 
@@ -79,7 +112,7 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { data, error } = await supabaseAdmin
         .from("analyses")
-        .select("id, repo_url, status, created_at, completed_at")
+        .select(ANALYSIS_COLUMNS)
         .eq("id", request.params.id)
         .eq("user_id", request.user!.id)
         .maybeSingle();
@@ -93,6 +126,56 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return reply.send(data);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/analyses/:id/findings",
+    { preHandler: [requireAuth, rateLimit] },
+    async (request, reply) => {
+      if (!(await ownsAnalysis(request.user!.id, request.params.id))) {
+        return reply.code(404).send({ error: "Analysis not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("findings")
+        .select(
+          "id, agent_name, severity, title, detail, source_refs, disputed, created_at",
+        )
+        .eq("analysis_id", request.params.id)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        request.log.error(error);
+        return reply.code(500).send({ error: "Failed to fetch findings" });
+      }
+
+      return reply.send({ findings: data });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/analyses/:id/trace",
+    { preHandler: [requireAuth, rateLimit] },
+    async (request, reply) => {
+      if (!(await ownsAnalysis(request.user!.id, request.params.id))) {
+        return reply.code(404).send({ error: "Analysis not found" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("analysis_runs")
+        .select(
+          "id, agent_name, status, error, tokens_used, cost_usd, retrieval_count, started_at, finished_at",
+        )
+        .eq("analysis_id", request.params.id)
+        .order("started_at", { ascending: true });
+
+      if (error) {
+        request.log.error(error);
+        return reply.code(500).send({ error: "Failed to fetch trace" });
+      }
+
+      return reply.send({ runs: data });
     },
   );
 }

@@ -22,11 +22,23 @@ export async function withScaffoldedRepo<T>(
   const dir = await mkdtemp(join(tmpdir(), "repo-swarm-golden-"));
   try {
     await cp(fixtureFilesDir, dir, { recursive: true });
-    await execFileAsync("git", ["init", "--initial-branch=main", "--quiet"], { cwd: dir });
-    await execFileAsync("git", ["config", "user.email", "eval@repo-swarm.local"], { cwd: dir });
-    await execFileAsync("git", ["config", "user.name", "repo-swarm eval"], { cwd: dir });
+    await execFileAsync("git", ["init", "--initial-branch=main", "--quiet"], {
+      cwd: dir,
+    });
+    await execFileAsync(
+      "git",
+      ["config", "user.email", "eval@repo-swarm.local"],
+      { cwd: dir },
+    );
+    await execFileAsync("git", ["config", "user.name", "repo-swarm eval"], {
+      cwd: dir,
+    });
     await execFileAsync("git", ["add", "-A"], { cwd: dir });
-    await execFileAsync("git", ["commit", "--quiet", "-m", "golden repo fixture"], { cwd: dir });
+    await execFileAsync(
+      "git",
+      ["commit", "--quiet", "-m", "golden repo fixture"],
+      { cwd: dir },
+    );
     return await fn(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
