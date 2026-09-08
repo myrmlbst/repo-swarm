@@ -2,6 +2,11 @@
 
 > Done = every box ticked. Each one is checkable in minutes.
 
+## TO DO
+- 3
+- 5
+- 7
+
 ---
 
 1. The problem is written down: your overview document exists, named as section 6 says, and a stranger can understand the problem from it.
@@ -19,8 +24,6 @@
 
 3. Maximum 2 swaps, each with a one-line reason in the overview document.
 
-- PROOF: [README.md](README.md)
-
 ---
 
 4. The system starts with one or two documented commands on a clean machine.
@@ -30,8 +33,6 @@
 ---
 
 5. Demo data is seeded and the README's 5-minute demo path works.
-
-- PROOF: [README.md](README.md)
 
 ---
 
