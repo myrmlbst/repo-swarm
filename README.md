@@ -1,13 +1,17 @@
 # Repo Swarm
+
 A multi-agent AI system: Point it at a GitHub repo and have it orchestrate multiple parallel subagents to index, architect, secure, deploy, and review your GitHub code repositories.
 
 ## The Problem
+
 Shipping an application to production securely requires cross-cutting knowledge (the codebase, AWS infrastructure, and security best practices) that most solo developers and small teams don't have in-house all at once. Manually auditing a repo for deployment-readiness and security gaps is slow, inconsistent, and easy to get wrong under deadline pressure. Generic AI code-review tools give shallow advice because they run one prompt over the whole repo instead of retrieving the specific context each concern actually needs.
 
 ## Who Has This Problem
+
 **Solo developers** and **small engineering teams without a dedicated DevOps or security engineer**, who are about to take a side project or MVP to production and need an AWS deployment and security review before launch.
 
 ## The 10x Claim
+
 What normally takes a senior engineer hours of manual review (reading the codebase, researching the right AWS services, checking for OWASP-style security issues, and writing up a coherent proposal) comes back as a reviewed, source-cited architecture proposal in under a minute.
 
 RAG and multi-agent systems solve different problems, and they become powerful together:
@@ -18,9 +22,11 @@ RAG and multi-agent systems solve different problems, and they become powerful t
 So instead of one giant agent trying to understand your codebase, AWS, security, architecture, and deployment all at once, you give different agents narrower jobs and let each retrieve the information it needs.
 
 ## Concept Coverage
+
 The capstone requires all of the following concepts. Most are ordinary application-layer engineering around the agent system; a few are specific to how the agents themselves reason.
 
 **Application Layer**
+
 | Concept                | How it shows up                                                                                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API endpoints          | [`api/src/routes/analyses.ts`](api/src/routes/analyses.ts), [`api/src/routes/apiKeys.ts`](api/src/routes/apiKeys.ts) — `POST /analyses`, `GET /analyses/{id}`, `GET /analyses/{id}/findings` and the GitHub webhook receiver are still planned |
@@ -43,6 +49,7 @@ The capstone requires all of the following concepts. Most are ordinary applicati
 Build order: get the vertical slice working end to end first (API → orchestrator → Code Agent → RAG → one downstream agent), then layer in auth/quotas/deployment, then guardrails/evals.
 
 ## Getting Started
+
 Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.
 
 1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_rag_pgvector.sql`, in the SQL editor (the second one enables `pgvector` and adds the RAG tables `agents/` uses).
