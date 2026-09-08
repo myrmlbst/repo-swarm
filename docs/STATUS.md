@@ -37,6 +37,7 @@ RAG is real: Voyage AI embeddings + pgvector on Supabase, chunked and indexed, a
   - [`agents/src/lib/`](agents/src/lib/) — also: the Claude tool-calling helper, the repo-clone helper, and two guardrails from [DESIGNDOC.md § 7](DESIGNDOC.md#7-guardrails) — `redact.ts` (regex-based secret redaction on repo content before it's indexed) and prompt-injection resistance (repo content is wrapped in an `<UNTRUSTED_REPOSITORY_CONTENT>` delimiter in `codeAgent.ts`'s system prompt).
   - [`agents/src/runner.ts`](agents/src/runner.ts) — standalone CLI entry point: `npm run dev -- <repo_url> "<question>"` (independent of the queue/worker above).
   - [`agents/eval/`](agents/eval/) — the golden-repo eval suite (DESIGNDOC.md § 8): 5 hand-crafted fixtures under `golden-repos/`, each with a real known issue (a hardcoded secret, a publicly-accessible DB, missing containerization, disabled TLS verification, an overly broad IAM policy) and a hand-labeled `expected-findings.json`. `eval/run.ts` scaffolds each fixture into a real temp git repo, runs `code_agent` → `{cloud_agent, security_agent}` against it (bypassing the orchestrator's LLM planning step for determinism), and scores the findings against the expected list using an LLM judge for semantic matching (`eval/lib/judge.ts`) — not exact string matching. `npm run eval`. Infra verified working end-to-end; **no completed scored run yet** (each attempt so far hit an expired credential mid-run) — see Not Built Yet.
+  - The prompt-injection guardrail test (DESIGNDOC.md § 7.1) — a sibling `guardrail-repos/prompt-injection/` fixture (not folded into `golden-repos/`'s aggregate score) plants a real hardcoded secret next to an injection attempt hidden in an HTML comment. `eval/injectionTest.ts` (`npm run eval:injection`) asserts the real issue still gets found — pass/fail, not precision/recall. **Verified live, PASS**: `code_agent` found the secret, explicitly flagged the injection attempt itself as suspicious, and found 8 further legitimate issues besides.
 
 ---
 
@@ -44,7 +45,6 @@ RAG is real: Voyage AI embeddings + pgvector on Supabase, chunked and indexed, a
 
 - A completed golden-repo eval run with real precision/recall numbers — the suite is built and its infrastructure verified, just hasn't finished a full run yet.
 - `tokens_used`/`cost_usd`/`retrieval_count` on `analysis_runs` — columns exist, unpopulated. Needs a signature change through `callTool.ts` and every agent to actually capture.
-- The prompt-injection guardrail has no test (DESIGNDOC § 7 calls for one — a golden-repo fixture with an injection attempt, asserting it's ignored; the eval harness could support this now).
 - `web/` doesn't display `proposal`/findings yet — the dashboard shows status only.
 - Partial-failure handling: if any agent throws, the whole analysis is marked `failed` — no partial-credit/partial-results yet.
 - The `incidents` collection (no agent uses it)
