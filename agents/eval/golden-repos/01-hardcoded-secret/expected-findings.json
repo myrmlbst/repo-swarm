@@ -1,0 +1,6 @@
+{
+  "findings": [
+    "a hardcoded API key is present in source code (should be loaded from an environment variable / secrets manager instead)",
+    "no rate limiting on public endpoints"
+  ]
+}

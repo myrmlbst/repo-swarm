@@ -1,0 +1,5 @@
+{
+  "findings": [
+    "the IAM policy grants overly broad permissions (wildcard Action and Resource) instead of least privilege"
+  ]
+}

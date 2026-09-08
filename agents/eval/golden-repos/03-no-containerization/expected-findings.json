@@ -1,0 +1,6 @@
+{
+  "findings": [
+    "the application is not containerized (no Dockerfile present)",
+    "no health check endpoint is defined"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "findings": [
+    "TLS certificate verification is disabled on an outbound HTTP request (verify=False)"
+  ]
+}

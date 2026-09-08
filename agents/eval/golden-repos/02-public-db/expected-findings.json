@@ -1,0 +1,6 @@
+{
+  "findings": [
+    "the database is publicly accessible over the internet rather than restricted to a private network",
+    "the /users route has no authentication or authorization"
+  ]
+}
