@@ -201,7 +201,7 @@ export const codeAgent: SpecialistAgent = {
       },
     );
 
-    const input = await callClaudeTool({
+    const { input, usage } = await callClaudeTool({
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(
         context.task,
@@ -242,6 +242,8 @@ export const codeAgent: SpecialistAgent = {
       task: context.task,
       summary: parsed.data.summary,
       data,
+      usage,
+      retrievalCount: RETRIEVAL_QUERIES.length + 1,
     };
   },
 };

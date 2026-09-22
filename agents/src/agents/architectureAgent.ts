@@ -83,7 +83,7 @@ export const architectureAgent: SpecialistAgent = {
     const securityFindings =
       (securityResult?.data as SecurityFindings | undefined) ?? null;
 
-    const input = await callClaudeTool({
+    const { input, usage } = await callClaudeTool({
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(
         context.task,
@@ -113,6 +113,7 @@ export const architectureAgent: SpecialistAgent = {
       task: context.task,
       summary: parsed.data.proposal,
       data,
+      usage,
     };
   },
 };

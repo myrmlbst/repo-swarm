@@ -101,7 +101,7 @@ export const cloudAgent: SpecialistAgent = {
       queries: [...RETRIEVAL_QUERIES, context.task],
     });
 
-    const input = await callClaudeTool({
+    const { input, usage } = await callClaudeTool({
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(
         context.task,
@@ -130,6 +130,8 @@ export const cloudAgent: SpecialistAgent = {
       task: context.task,
       summary: parsed.data.proposal,
       data,
+      usage,
+      retrievalCount: RETRIEVAL_QUERIES.length + 1,
     };
   },
 };

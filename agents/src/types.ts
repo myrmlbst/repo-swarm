@@ -22,11 +22,21 @@ export interface AgentRequest {
   question: string;
 }
 
+/** Token usage from one Claude call — real numbers from the API response's `usage` field. */
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface AgentResult {
   agent: AgentName;
   task: string;
   summary: string;
   data?: unknown;
+  /** Tokens from this agent's own Claude call(s) — for `analysis_runs.tokens_used`. */
+  usage?: Usage;
+  /** Number of retrieval queries this agent ran (code/cloud/security only). */
+  retrievalCount?: number;
 }
 
 /**
@@ -52,9 +62,12 @@ export interface SpecialistAgent {
  * partial `runs` array to return (see orchestrator.ts's module comment).
  */
 export interface AgentRunRecord {
-  agent: AgentName;
+  /** "orchestrator" covers the task-planning call itself, not one of the five specialist agents. */
+  agent: AgentName | "orchestrator";
   startedAt: string;
   finishedAt: string;
+  usage?: Usage;
+  retrievalCount?: number;
 }
 
 export interface OrchestratorResult {

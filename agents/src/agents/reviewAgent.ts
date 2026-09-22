@@ -110,7 +110,7 @@ export const reviewAgent: SpecialistAgent = {
     const proposal =
       (architectureResult?.data as ArchitectureProposal | undefined) ?? null;
 
-    const input = await callClaudeTool({
+    const { input, usage } = await callClaudeTool({
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(
         context.task,
@@ -144,6 +144,7 @@ export const reviewAgent: SpecialistAgent = {
       task: context.task,
       summary,
       data,
+      usage,
     };
   },
 };

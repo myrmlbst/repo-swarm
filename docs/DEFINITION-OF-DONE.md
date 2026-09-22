@@ -3,6 +3,7 @@
 > Done = every box ticked. Each one is checkable in minutes.
 
 ## TO DO
+
 - 3
 - 5
 - 7

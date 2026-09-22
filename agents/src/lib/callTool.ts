@@ -1,5 +1,11 @@
 import { anthropic } from "./anthropicClient";
 import { env } from "../env";
+import type { Usage } from "../types";
+
+export interface ClaudeToolCallResult {
+  input: unknown;
+  usage: Usage;
+}
 
 export interface ToolSpec {
   name: string;
@@ -25,7 +31,7 @@ export async function callClaudeTool(params: {
   user: string;
   tool: ToolSpec;
   maxTokens?: number;
-}): Promise<unknown> {
+}): Promise<ClaudeToolCallResult> {
   const message = await anthropic.messages.create({
     model: env.ANTHROPIC_MODEL,
     max_tokens: params.maxTokens ?? 1536,
@@ -44,5 +50,11 @@ export async function callClaudeTool(params: {
     throw new Error(`Claude did not call the "${params.tool.name}" tool`);
   }
 
-  return toolUse.input;
+  return {
+    input: toolUse.input,
+    usage: {
+      inputTokens: message.usage.input_tokens,
+      outputTokens: message.usage.output_tokens,
+    },
+  };
 }

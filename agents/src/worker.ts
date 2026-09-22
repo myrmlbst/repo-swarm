@@ -11,6 +11,8 @@
 import { redis } from "./lib/redisClient";
 import { supabaseAdmin } from "./lib/supabaseAdmin";
 import { runOrchestrator } from "./orchestrator";
+import { estimateCostUsd } from "./lib/pricing";
+import { env } from "./env";
 import type {
   AgentResult,
   ArchitectureProposal,
@@ -164,13 +166,29 @@ async function processAnalysis(analysisId: string): Promise<void> {
         console.error(`[worker] failed to insert findings:`, error.message);
     }
 
-    const runRows = runs.map((r) => ({
-      analysis_id: analysisId,
-      agent_name: r.agent,
-      status: "complete" as const,
-      started_at: r.startedAt,
-      finished_at: r.finishedAt,
-    }));
+    const runRows = runs.map((r) => {
+      const tokensUsed = r.usage
+        ? r.usage.inputTokens + r.usage.outputTokens
+        : null;
+      const costUsd = r.usage
+        ? estimateCostUsd(
+            env.ANTHROPIC_MODEL,
+            r.usage.inputTokens,
+            r.usage.outputTokens,
+          )
+        : null;
+
+      return {
+        analysis_id: analysisId,
+        agent_name: r.agent,
+        status: "complete" as const,
+        started_at: r.startedAt,
+        finished_at: r.finishedAt,
+        tokens_used: tokensUsed,
+        cost_usd: costUsd,
+        retrieval_count: r.retrievalCount ?? null,
+      };
+    });
     if (runRows.length > 0) {
       const { error } = await supabaseAdmin
         .from("analysis_runs")

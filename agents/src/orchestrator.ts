@@ -9,6 +9,7 @@ import type {
   OrchestratorResult,
   Task,
   TaskPlan,
+  Usage,
 } from "./types";
 
 const taskPlanSchema = z.object({
@@ -71,8 +72,10 @@ what to ask each one; the calling system takes care of running them in the right
 
 Call submit_task_plan with the resulting plan. Do not include agents that aren't needed.`;
 
-async function planWithClaude(request: AgentRequest): Promise<TaskPlan> {
-  const input = await callClaudeTool({
+async function planWithClaude(
+  request: AgentRequest,
+): Promise<{ plan: TaskPlan; usage: Usage }> {
+  const { input, usage } = await callClaudeTool({
     system: SYSTEM_PROMPT,
     user: `Repository: ${request.repoUrl}\n\nDeveloper request: ${request.question}`,
     tool: SUBMIT_PLAN_TOOL,
@@ -86,7 +89,7 @@ async function planWithClaude(request: AgentRequest): Promise<TaskPlan> {
     );
   }
 
-  return parsed.data;
+  return { plan: parsed.data, usage };
 }
 
 function taskFor(tasks: Task[], agent: Task["agent"]): Task | undefined {
@@ -110,6 +113,8 @@ async function runTimed(
     agent: task.agent,
     startedAt,
     finishedAt: new Date().toISOString(),
+    usage: result.usage,
+    retrievalCount: result.retrievalCount,
   });
   return result;
 }
@@ -161,7 +166,15 @@ async function executePlan(
 export async function runOrchestrator(
   request: AgentRequest,
 ): Promise<OrchestratorResult> {
-  const plan = await planWithClaude(request);
+  const planStartedAt = new Date().toISOString();
+  const { plan, usage: planUsage } = await planWithClaude(request);
+  const orchestratorRun: AgentRunRecord = {
+    agent: "orchestrator",
+    startedAt: planStartedAt,
+    finishedAt: new Date().toISOString(),
+    usage: planUsage,
+  };
+
   const { results, runs } = await executePlan(request, plan);
-  return { plan, results, runs };
+  return { plan, results, runs: [orchestratorRun, ...runs] };
 }
