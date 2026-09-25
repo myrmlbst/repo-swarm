@@ -9,6 +9,7 @@ import {
   type Finding,
 } from "@/lib/api";
 import { SubmitRepoForm } from "./SubmitRepoForm";
+import { MarkdownProposal } from "./MarkdownProposal";
 import { FOCUS_RING } from "@/lib/styles";
 
 const STATUS_STYLES: Record<Analysis["status"], string> = {
@@ -180,9 +181,9 @@ export function AnalysesList() {
                             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                               Proposal
                             </h3>
-                            <p className="whitespace-pre-wrap text-sm text-gray-800">
-                              {analysis.proposal}
-                            </p>
+                            <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                              <MarkdownProposal content={analysis.proposal} />
+                            </div>
                           </div>
                         )}
 
