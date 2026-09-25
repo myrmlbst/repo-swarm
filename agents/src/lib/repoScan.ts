@@ -46,6 +46,17 @@ const EXCLUDED_EXTENSIONS = new Set([
   ".mp4",
   ".mp3",
   ".mov",
+  // Serialized ML models/arrays — binary, and common enough in scanned
+  // repos (this project itself analyzes them) that they're worth excluding
+  // by extension rather than relying solely on the NUL-byte check below.
+  ".pkl",
+  ".h5",
+  ".npy",
+  ".npz",
+  ".pt",
+  ".pth",
+  ".onnx",
+  ".joblib",
 ]);
 const EXCLUDED_FILENAMES = new Set([
   "package-lock.json",
@@ -121,7 +132,13 @@ export async function collectIndexableFiles(
     if (info.size > MAX_FILE_BYTES) continue;
 
     const content = await readFile(fullPath, "utf-8").catch(() => null);
-    if (content === null) continue; // skip anything that isn't valid UTF-8 (likely binary)
+    if (content === null) continue; // fs-level read failure (permissions, etc.)
+    // Node's utf-8 decode doesn't throw on invalid byte sequences — it
+    // substitutes U+FFFD — so the catch above never catches actual binary
+    // content. A NUL byte is the standard binary-file heuristic (git uses
+    // the same check) and, left in, breaks the later Postgres insert with
+    // "unsupported Unicode escape sequence" since text/jsonb can't hold it.
+    if (content.includes("\u0000")) continue;
 
     const remaining = MAX_TOTAL_CHARS - totalChars;
     const truncated =
