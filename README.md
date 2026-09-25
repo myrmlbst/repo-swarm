@@ -88,21 +88,27 @@ where `$ACCESS_TOKEN` is the `access_token` from a Supabase `signInWithPassword`
 ```mermaid
 flowchart TD
     Dev((Developer)) -->|submits repo| API
-    GH[GitHub PR webhook] -->|triggers| API
+    GH["GitHub PR webhook (planned)"]:::planned -.->|would trigger| API
 
     subgraph AppLayer["Application layer"]
         API[Backend API]
         Auth[Auth / API keys]
-        RL[Rate limiter and quotas]
-        Cache[("Redis cache")]
-        PG[("Postgres: users, analyses, findings")]
+        RL[Rate limiter]
+        Redis[("Redis: rate-limit counters + job queue")]
+        PG[("Postgres: users, analyses, findings, usage")]
     end
 
     API --> Auth
     API --> RL
-    API <--> Cache
-    API <--> PG
-    RL -->|allowed request| Orch
+    API -->|check + increment quota, insert row| PG
+    API -->|enqueue job id| Redis
+
+    subgraph WorkerProc["Agent worker — separate process, polls every 2s"]
+        Worker[Queue consumer]
+    end
+    Redis -.pop.-> Worker
+    Worker --> Orch
+    Worker -.writes proposal, findings, usage.-> PG
 
     subgraph AgentLayer["Agent layer"]
         Orch[Orchestrator]
@@ -119,39 +125,48 @@ flowchart TD
     Cloud -->|3 combine| Arch
     Sec -->|3 combine| Arch
     Arch -->|4 critique| Rev
-    Rev -->|final proposal| API
 
     subgraph RAGLayer["Retrieval layer"]
-        VDB[("Vector DB: repository, cloud_docs, security, incidents")]
+        VDB[("pgvector: repository, cloud_docs, security")]
+        Incidents["incidents collection (designed, no agent yet)"]:::planned
     end
     Code -.retrieves.-> VDB
     Cloud -.retrieves.-> VDB
     Sec -.retrieves.-> VDB
 
-    LLM[["LLM providers"]]
-    Code --> LLM
-    Cloud --> LLM
-    Sec --> LLM
-    Arch --> LLM
-    Rev --> LLM
+    Claude[["Claude — every agent's reasoning"]]
+    Voyage[["Voyage — embeddings"]]
+    Orch --> Claude
+    Code --> Claude
+    Cloud --> Claude
+    Sec --> Claude
+    Arch --> Claude
+    Rev --> Claude
+    Code -.embeds chunks via.-> Voyage
 
     subgraph QualityLayer["Guardrails and evals"]
         G[Injection filter + secret redaction]
         E[Golden-repo eval suite]
     end
     Code --> G
-    Sec --> G
-    Rev -.scored by.-> E
+    Cloud -.scored by.-> E
+    Sec -.scored by.-> E
 
-    subgraph DeployLayer["Deployment"]
+    subgraph DeployLayer["Deployment (planned, not yet live)"]
         ALB[ALB] --> ECS[ECS Fargate]
     end
-    ECS -.hosts.-> API
+    ECS -.would host.-> API
+
+    classDef planned fill:#f5f5f5,stroke:#999,stroke-dasharray: 4 3,color:#666
+    class GH,Incidents,ALB,ECS planned
 ```
 
-- **Solid arrows** are the request/response path. **Dashed arrows** are retrieval, scoring, or hosting relationships.
+- **Solid arrows** are a direct call. **Dashed arrows** are retrieval, scoring, polling, or a planned/not-yet-built relationship (greyed nodes are planned, not implemented — the webhook, the `incidents` collection, and the ECS/ALB deployment).
+- `POST /v1/analyses` doesn't call the orchestrator directly — it enqueues a job ID in Redis and returns immediately. A separate, independently-running worker process polls that queue and runs the orchestrator; the worker writes results straight to Postgres, not back through the API. This split is real, not a simplification — it's why the worker needs its own restart when e.g. an API key changes, independent of the API server.
 - Code Agent runs first; Cloud and Security agents fan out in parallel off its output, then Architecture and Review run sequentially.
-- Guardrails sit on the agents that touch untrusted repo content (Code, Security) — filtering prompt injection in and redacting real secrets out.
+- The injection/redaction guardrail sits only on Code Agent, the one agent that reads raw repo content. Security Agent never sees the repo directly — only Code Agent's already-processed facts plus trusted internal docs.
+- Every agent's reasoning goes through Claude specifically (not a multi-provider setup); Voyage is a separate, distinct dependency used only for embedding a submitted repo's chunks inside Code Agent.
+- The eval suite scores Code/Cloud/Security agent output directly, bypassing the orchestrator's planning step — Architecture and Review Agent are not covered by eval runs today.
 
 ## Example Flow
 
