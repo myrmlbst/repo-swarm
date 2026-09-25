@@ -66,12 +66,16 @@ async function runOneGoldenRepo(dirName: string): Promise<GoldenRepoResult> {
         ...((securityResult.data as { findings: Finding[] }).findings ?? []),
         // code_agent's own "issues" list is where redacted-secret and
         // missing-containerization findings actually land (it doesn't
-        // produce Finding objects, just strings) — fold them in too.
-        ...codeFacts.issues.map((issue): Finding => ({
-          title: issue,
-          detail: issue,
-          severity: "info",
-        })),
+        // produce Finding objects, just {description, sourcePath}) — fold
+        // them in too.
+        ...codeFacts.issues.map(
+          (issue): Finding => ({
+            title: issue.description,
+            detail: issue.description,
+            severity: "info",
+            sources: issue.sourcePath ? [issue.sourcePath] : [],
+          }),
+        ),
       ];
 
       return findings.map((f) => `${f.title}: ${f.detail}`);

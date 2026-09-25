@@ -50,6 +50,10 @@ just concatenated, but reconciled: if a security finding implies a change to the
 (e.g. "database publicly accessible" implies "put RDS in a private subnet"), fold that into the \
 proposal text and the services list, not just the findings list.
 
+Each incoming finding already has a sources array (the file/doc paths that justify it). When you \
+combine or de-duplicate findings, carry each finding's sources through unchanged; if you merge two \
+findings into one, union their sources rather than dropping either.
+
 Call submit_architecture with the combined result.`;
 
 function buildUserPrompt(

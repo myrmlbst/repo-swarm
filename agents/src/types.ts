@@ -83,6 +83,14 @@ export interface Finding {
   title: string;
   detail: string;
   severity: Severity;
+  /** File/doc paths (from retrieved chunks) that support this finding — empty if it isn't tied to a specific excerpt. */
+  sources: string[];
+}
+
+export interface CodeIssue {
+  description: string;
+  /** The repo file this was observed in, or null for a repo-wide absence (e.g. "no rate limiting"). */
+  sourcePath: string | null;
 }
 
 /** code_agent's `AgentResult.data` shape. */
@@ -93,7 +101,7 @@ export interface CodeFacts {
   containerized: boolean;
   authentication: string | null;
   external_services: string[];
-  issues: string[];
+  issues: CodeIssue[];
 }
 
 /** cloud_agent's and architecture_agent's `AgentResult.data` shape. */

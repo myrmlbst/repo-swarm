@@ -16,6 +16,7 @@ export interface Finding {
   severity: "info" | "warn" | "critical";
   title: string;
   detail: string;
+  source_refs: string[];
   disputed: boolean;
   created_at: string;
 }

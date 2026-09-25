@@ -337,6 +337,21 @@ export function AnalysesList() {
                                             {finding.detail}
                                           </p>
                                         )}
+                                        {finding.source_refs.length > 0 && (
+                                          <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-gray-400">
+                                            <span>Sources:</span>
+                                            {finding.source_refs.map(
+                                              (path) => (
+                                                <code
+                                                  key={path}
+                                                  className="rounded bg-gray-100 px-1 py-0.5 font-mono text-gray-600"
+                                                >
+                                                  {path}
+                                                </code>
+                                              ),
+                                            )}
+                                          </p>
+                                        )}
                                       </li>
                                     ),
                                   )}

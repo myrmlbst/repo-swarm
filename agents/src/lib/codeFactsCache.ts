@@ -10,8 +10,12 @@ export interface CachedCodeFacts {
   facts: CodeFacts;
 }
 
+// v2: CodeFacts.issues changed shape (plain strings -> {description,
+// sourcePath} objects, for citations). Bumping the key prefix means old
+// cached entries are simply never looked up again — cheaper and safer than
+// migrating them in place, and they age out via TTL regardless.
 function cacheKey(repoUrl: string, commitSha: string): string {
-  return `code_facts:${repoUrl}@${commitSha}`;
+  return `code_facts_v2:${repoUrl}@${commitSha}`;
 }
 
 export async function getCachedCodeFacts(

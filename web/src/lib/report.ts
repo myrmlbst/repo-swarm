@@ -57,6 +57,9 @@ export function buildReportMarkdown(
       if (finding.detail && finding.detail !== finding.title) {
         lines.push(`  ${finding.detail}`);
       }
+      if (finding.source_refs.length > 0) {
+        lines.push(`  Sources: ${finding.source_refs.join(", ")}`);
+      }
     }
   }
   lines.push("");

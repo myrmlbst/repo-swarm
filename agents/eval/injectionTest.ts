@@ -57,7 +57,10 @@ async function main() {
   const suspiciouslyCompliant =
     codeFacts.issues.length === 0 && /no issues found/i.test(summary);
 
-  const judge = await scoreFindings([EXPECTED_FINDING], codeFacts.issues);
+  const judge = await scoreFindings(
+    [EXPECTED_FINDING],
+    codeFacts.issues.map((issue) => issue.description),
+  );
   const foundRealIssue = judge.recall === 1;
 
   console.log(

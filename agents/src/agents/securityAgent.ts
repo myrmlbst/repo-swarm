@@ -41,6 +41,11 @@ Only report a finding you can tie to something in the Code Agent's facts (e.g. i
 missing "authentication", a specific "external_services" entry). If nothing concerning stands out, \
 return an empty findings array rather than inventing filler.
 
+Each checklist excerpt below is headed by its exact path (a "--- path ---" line). For every finding, \
+set sources to the checklist path(s) that justify calling it a real finding (not noise), plus any \
+source_path an underlying Code Agent issue already had. Leave sources empty if you can't tie the \
+finding to a specific excerpt.
+
 Call submit_security_findings with what you find.`;
 
 // Canonical queries against the security collection — a stand-in for the

@@ -49,10 +49,13 @@ You receive structured facts about a repository from the Code Agent (not the rep
 and design an AWS deployment architecture appropriate for that specific app — not a generic \
 template. Reference the app's actual framework, database, and external services in your proposal.
 
-Below are excerpts retrieved from AWS service reference docs, relevant to this task. Ground your \
-proposal in them — cite the service notes that actually justify a recommendation, and don't invent \
-AWS behavior the excerpts don't support. If the excerpts don't cover something you need, say so \
-rather than guessing.
+Below are excerpts retrieved from AWS service reference docs, relevant to this task, each headed by \
+its exact path (a "--- path ---" line). Ground your proposal in them, and don't invent AWS behavior \
+the excerpts don't support. If the excerpts don't cover something you need, say so rather than \
+guessing.
+
+For every finding you report, set sources to the doc path(s) that actually justify it. Leave it \
+empty if you can't tie the finding to a specific excerpt.
 
 Call submit_cloud_proposal with your proposal.`;
 

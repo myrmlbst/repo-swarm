@@ -41,26 +41,27 @@ interface FindingRow {
   severity: Severity;
   title: string;
   detail: string;
-  source_refs: Record<string, unknown>;
+  source_refs: string[];
   disputed: boolean;
 }
 
 /**
  * Flattens every agent's structured output into findings rows. code_agent's
- * "issues" (plain strings) and review_agent's "disputed" claims (their own
- * rows, not retroactively flagging an existing one — see
- * 0004_analysis_results.sql) are folded in alongside cloud/security/
- * architecture's structured Finding[] arrays.
+ * "issues" (each with its own optional sourcePath) and review_agent's
+ * "disputed" claims (their own rows, not retroactively flagging an existing
+ * one — see 0004_analysis_results.sql) are folded in alongside
+ * cloud/security/architecture's structured Finding[] arrays, whose
+ * `sources` populates the same source_refs column.
  */
 function findingsFromResults(
   analysisId: string,
   results: AgentResult[],
 ): FindingRow[] {
   const rows: FindingRow[] = [];
-  const base = (agentName: string) => ({
+  const base = (agentName: string, sourceRefs: string[]) => ({
     analysis_id: analysisId,
     agent_name: agentName,
-    source_refs: {},
+    source_refs: sourceRefs,
   });
 
   for (const result of results) {
@@ -68,10 +69,10 @@ function findingsFromResults(
       const facts = result.data as CodeFacts;
       for (const issue of facts.issues) {
         rows.push({
-          ...base(result.agent),
+          ...base(result.agent, issue.sourcePath ? [issue.sourcePath] : []),
           severity: "info",
-          title: issue,
-          detail: issue,
+          title: issue.description,
+          detail: issue.description,
           disputed: false,
         });
       }
@@ -82,7 +83,7 @@ function findingsFromResults(
       const data = result.data as ArchitectureProposal;
       for (const f of data.findings) {
         rows.push({
-          ...base(result.agent),
+          ...base(result.agent, f.sources),
           severity: f.severity,
           title: f.title,
           detail: f.detail,
@@ -93,7 +94,7 @@ function findingsFromResults(
       const data = result.data as SecurityFindings;
       for (const f of data.findings) {
         rows.push({
-          ...base(result.agent),
+          ...base(result.agent, f.sources),
           severity: f.severity,
           title: f.title,
           detail: f.detail,
@@ -104,7 +105,7 @@ function findingsFromResults(
       const data = result.data as ReviewCritique;
       for (const d of data.disputed) {
         rows.push({
-          ...base(result.agent),
+          ...base(result.agent, []),
           severity: "info",
           title: d.claim,
           detail: d.reason,
