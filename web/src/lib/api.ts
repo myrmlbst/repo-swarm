@@ -20,6 +20,18 @@ export interface Finding {
   created_at: string;
 }
 
+export interface AgentRun {
+  id: string;
+  agent_name: string;
+  status: "complete" | "failed";
+  error: string | null;
+  tokens_used: number | null;
+  cost_usd: number | null;
+  retrieval_count: number | null;
+  started_at: string;
+  finished_at: string;
+}
+
 async function apiFetch(path: string, accessToken: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -61,4 +73,11 @@ export function getFindings(
   analysisId: string,
 ): Promise<{ findings: Finding[] }> {
   return apiFetch(`/v1/analyses/${analysisId}/findings`, accessToken);
+}
+
+export function getTrace(
+  accessToken: string,
+  analysisId: string,
+): Promise<{ runs: AgentRun[] }> {
+  return apiFetch(`/v1/analyses/${analysisId}/trace`, accessToken);
 }

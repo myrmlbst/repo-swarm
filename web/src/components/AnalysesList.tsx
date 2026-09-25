@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import {
   listAnalyses,
   getFindings,
+  getTrace,
   type Analysis,
   type Finding,
+  type AgentRun,
 } from "@/lib/api";
 import { SubmitRepoForm } from "./SubmitRepoForm";
 import { MarkdownProposal } from "./MarkdownProposal";
@@ -30,7 +32,19 @@ const SEVERITY_STYLES: Record<Finding["severity"], string> = {
 // catch up to "complete"/"failed" without a manual reload.
 const POLL_INTERVAL_MS = 4000;
 
-type FindingsState = "loading" | "error" | "ready";
+function formatUsd(amount: number): string {
+  return `$${amount.toFixed(4)}`;
+}
+
+function formatDuration(startedAt: string, finishedAt: string): string {
+  const seconds =
+    (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000;
+  return `${seconds.toFixed(1)}s`;
+}
+
+// Shared by both the findings and the usage/cost trace — each analysis's
+// two lazily-fetched sections track their own fetch state independently.
+type LoadState = "loading" | "error" | "ready";
 
 export function AnalysesList() {
   const [analyses, setAnalyses] = useState<Analysis[] | null>(null);
@@ -39,9 +53,13 @@ export function AnalysesList() {
   const [findingsByAnalysis, setFindingsByAnalysis] = useState<
     Record<string, Finding[]>
   >({});
-  const [findingsState, setFindingsState] = useState<
-    Record<string, FindingsState>
+  const [findingsState, setFindingsState] = useState<Record<string, LoadState>>(
+    {},
+  );
+  const [traceByAnalysis, setTraceByAnalysis] = useState<
+    Record<string, AgentRun[]>
   >({});
+  const [traceState, setTraceState] = useState<Record<string, LoadState>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [printTarget, setPrintTarget] = useState<{
     analysis: Analysis;
@@ -86,23 +104,37 @@ export function AnalysesList() {
     }
     setExpandedId(analysis.id);
 
-    if (analysis.status !== "complete" || findingsByAnalysis[analysis.id]) {
-      return;
+    if (analysis.status !== "complete") return;
+
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+
+    if (!findingsByAnalysis[analysis.id]) {
+      setFindingsState((s) => ({ ...s, [analysis.id]: "loading" }));
+      try {
+        const { findings } = await getFindings(
+          session.access_token,
+          analysis.id,
+        );
+        setFindingsByAnalysis((f) => ({ ...f, [analysis.id]: findings }));
+        setFindingsState((s) => ({ ...s, [analysis.id]: "ready" }));
+      } catch {
+        setFindingsState((s) => ({ ...s, [analysis.id]: "error" }));
+      }
     }
 
-    setFindingsState((s) => ({ ...s, [analysis.id]: "loading" }));
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { findings } = await getFindings(session.access_token, analysis.id);
-      setFindingsByAnalysis((f) => ({ ...f, [analysis.id]: findings }));
-      setFindingsState((s) => ({ ...s, [analysis.id]: "ready" }));
-    } catch {
-      setFindingsState((s) => ({ ...s, [analysis.id]: "error" }));
+    if (!traceByAnalysis[analysis.id]) {
+      setTraceState((s) => ({ ...s, [analysis.id]: "loading" }));
+      try {
+        const { runs } = await getTrace(session.access_token, analysis.id);
+        setTraceByAnalysis((t) => ({ ...t, [analysis.id]: runs }));
+        setTraceState((s) => ({ ...s, [analysis.id]: "ready" }));
+      } catch {
+        setTraceState((s) => ({ ...s, [analysis.id]: "error" }));
+      }
     }
   }
 
@@ -310,6 +342,103 @@ export function AnalysesList() {
                                   )}
                                 </ul>
                               ))}
+                          </div>
+
+                          <div>
+                            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              Usage &amp; cost
+                            </h3>
+                            {traceState[analysis.id] === "loading" && (
+                              <p className="text-sm text-gray-500">
+                                Loading...
+                              </p>
+                            )}
+                            {traceState[analysis.id] === "error" && (
+                              <p role="alert" className="text-sm text-red-600">
+                                Failed to load usage data.
+                              </p>
+                            )}
+                            {traceState[analysis.id] === "ready" &&
+                              (() => {
+                                const runs = traceByAnalysis[analysis.id];
+                                const totalTokens = runs.reduce(
+                                  (sum, r) => sum + (r.tokens_used ?? 0),
+                                  0,
+                                );
+                                const totalCost = runs.reduce(
+                                  (sum, r) => sum + (r.cost_usd ?? 0),
+                                  0,
+                                );
+                                return (
+                                  <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+                                    <table className="w-full text-left text-sm">
+                                      <thead>
+                                        <tr className="border-b border-gray-200 text-xs text-gray-500">
+                                          <th className="px-3 py-2 font-medium">
+                                            Agent
+                                          </th>
+                                          <th className="px-3 py-2 font-medium">
+                                            Duration
+                                          </th>
+                                          <th className="px-3 py-2 font-medium">
+                                            Tokens
+                                          </th>
+                                          <th className="px-3 py-2 font-medium">
+                                            Cost
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {runs.map((run) => (
+                                          <tr key={run.id}>
+                                            <td className="px-3 py-1.5 text-gray-900">
+                                              {run.agent_name}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-gray-600">
+                                              {formatDuration(
+                                                run.started_at,
+                                                run.finished_at,
+                                              )}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-gray-600">
+                                              {run.tokens_used ?? (
+                                                <span className="text-gray-400">
+                                                  cached
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-gray-600">
+                                              {run.cost_usd !== null ? (
+                                                formatUsd(run.cost_usd)
+                                              ) : (
+                                                <span className="text-gray-400">
+                                                  cached
+                                                </span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                      <tfoot>
+                                        <tr className="border-t border-gray-200 font-medium text-gray-900">
+                                          <td
+                                            className="px-3 py-1.5"
+                                            colSpan={2}
+                                          >
+                                            Total
+                                          </td>
+                                          <td className="px-3 py-1.5">
+                                            {totalTokens}
+                                          </td>
+                                          <td className="px-3 py-1.5">
+                                            {formatUsd(totalCost)}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                  </div>
+                                );
+                              })()}
                           </div>
                         </>
                       )}
