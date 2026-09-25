@@ -22,18 +22,19 @@ Two guardrails sit on the agents that touch untrusted repo content: prompt-injec
 
 ### Concepts implemented
 
-Six of the seven core concepts from the program are implemented (everything except PDF/email reporting, which didn't fit this product: the output is a structured proposal, not a document to send):
+All seven core concepts from the program are implemented:
 
 | Concept | Where it lives |
 |---|---|
 | API endpoints | `api/src/routes/analyses.ts`, `api/src/routes/apiKeys.ts`: `POST /v1/analyses`, `GET /v1/analyses/{id}`, `GET /v1/analyses/{id}/findings` |
 | Database | Postgres via Supabase: `supabase/migrations/` (`api_keys`, `analyses`, `findings`, `analysis_runs`) |
 | Authentication | Supabase Auth (session JWT) + API keys for programmatic access: `api/src/lib/auth.ts`, `api/src/lib/apiKeys.ts` |
+| Reporting (PDF) | Each completed analysis can be copied as one Markdown report or downloaded as a PDF via the browser's own print dialog: `web/src/components/AnalysesList.tsx`, `web/src/lib/report.ts` |
 | Background jobs | A queue worker (`agents/src/worker.ts`) picks up and processes analyses off the request path (`POST /v1/analyses` just enqueues) |
 | Caching | Redis-backed cache of structured per-repo facts (not raw Q&A strings): `agents/src/lib/codeFactsCache.ts` |
 | LLM integration | Orchestrator + five specialist agents (Code, Cloud, Security, Architecture, Review) built on the Anthropic API |
 
-Beyond the required five, two additional concepts from the swap table are also implemented, going past the minimum:
+Beyond the core seven, two additional concepts from the swap table are also implemented, going further still:
 
 | Concept | Why it's here | Where it lives |
 |---|---|---|

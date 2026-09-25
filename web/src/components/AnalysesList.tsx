@@ -11,6 +11,7 @@ import {
 import { SubmitRepoForm } from "./SubmitRepoForm";
 import { MarkdownProposal } from "./MarkdownProposal";
 import { FOCUS_RING } from "@/lib/styles";
+import { buildReportMarkdown } from "@/lib/report";
 
 const STATUS_STYLES: Record<Analysis["status"], string> = {
   queued: "bg-gray-100 text-gray-700",
@@ -41,6 +42,11 @@ export function AnalysesList() {
   const [findingsState, setFindingsState] = useState<
     Record<string, FindingsState>
   >({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [printTarget, setPrintTarget] = useState<{
+    analysis: Analysis;
+    findings: Finding[];
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -100,156 +106,236 @@ export function AnalysesList() {
     }
   }
 
+  // Print the hidden #print-report view (below) once it's populated with
+  // the target analysis, then clear it once the print dialog closes —
+  // covers both "printed" and "cancelled" since afterprint fires either way.
+  useEffect(() => {
+    if (!printTarget) return;
+    const timer = setTimeout(() => window.print(), 50);
+    const handleAfterPrint = () => setPrintTarget(null);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [printTarget]);
+
+  async function handleCopy(analysis: Analysis) {
+    const report = buildReportMarkdown(
+      analysis,
+      findingsByAnalysis[analysis.id] ?? [],
+    );
+    try {
+      await navigator.clipboard.writeText(report);
+      setCopiedId(analysis.id);
+      setTimeout(
+        () => setCopiedId((id) => (id === analysis.id ? null : id)),
+        1500,
+      );
+    } catch {
+      setError("Couldn't copy to clipboard — your browser may be blocking it.");
+    }
+  }
+
+  function handleDownloadPdf(analysis: Analysis) {
+    setPrintTarget({
+      analysis,
+      findings: findingsByAnalysis[analysis.id] ?? [],
+    });
+  }
+
   return (
-    <div className="space-y-6">
-      <SubmitRepoForm onSubmitted={refresh} />
+    <>
+      <div className="space-y-6 print:hidden">
+        <SubmitRepoForm onSubmitted={refresh} />
 
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
 
-      {analyses === null ? (
-        <p className="text-sm text-gray-500">Loading...</p>
-      ) : analyses.length === 0 ? (
-        <p className="text-sm text-gray-500">No repos submitted yet.</p>
-      ) : (
-        <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
-          {analyses.map((analysis) => {
-            const isExpanded = expandedId === analysis.id;
-            const canExpand =
-              analysis.status === "complete" || analysis.status === "failed";
+        {analyses === null ? (
+          <p className="text-sm text-gray-500">Loading...</p>
+        ) : analyses.length === 0 ? (
+          <p className="text-sm text-gray-500">No repos submitted yet.</p>
+        ) : (
+          <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
+            {analyses.map((analysis) => {
+              const isExpanded = expandedId === analysis.id;
+              const canExpand =
+                analysis.status === "complete" || analysis.status === "failed";
 
-            return (
-              <li key={analysis.id}>
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
-                  <a
-                    href={analysis.repo_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="min-w-0 truncate text-sm text-blue-600 hover:underline"
-                  >
-                    {analysis.repo_url}
-                  </a>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[analysis.status]}`}
+              return (
+                <li key={analysis.id}>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <a
+                      href={analysis.repo_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 truncate text-sm text-blue-600 hover:underline"
                     >
-                      {analysis.status}
-                    </span>
-                    {canExpand && (
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(analysis)}
-                        aria-expanded={isExpanded}
-                        className={`text-xs font-medium text-gray-500 hover:text-gray-700 ${FOCUS_RING}`}
+                      {analysis.repo_url}
+                    </a>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[analysis.status]}`}
                       >
-                        {isExpanded ? "Hide details ▴" : "Details ▾"}
-                      </button>
-                    )}
+                        {analysis.status}
+                      </span>
+                      {canExpand && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(analysis)}
+                          aria-expanded={isExpanded}
+                          className={`text-xs font-medium text-gray-500 hover:text-gray-700 ${FOCUS_RING}`}
+                        >
+                          {isExpanded ? "Hide details ▴" : "Details ▾"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {isExpanded && (
-                  <div className="space-y-4 border-t border-gray-100 bg-gray-50 px-4 py-4">
-                    {analysis.status === "failed" && (
-                      <p className="text-sm text-gray-600">
-                        This analysis failed before producing a result. Check
-                        the agents worker's logs for the error.
-                      </p>
-                    )}
+                  {isExpanded && (
+                    <div className="space-y-4 border-t border-gray-100 bg-gray-50 px-4 py-4">
+                      {analysis.status === "failed" && (
+                        <p className="text-sm text-gray-600">
+                          This analysis failed before producing a result. Check
+                          the agents worker's logs for the error.
+                        </p>
+                      )}
 
-                    {analysis.status === "complete" && (
-                      <>
-                        {analysis.review_approved !== null && (
-                          <span
-                            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                              analysis.review_approved
-                                ? "bg-green-100 text-green-700"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {analysis.review_approved
-                              ? "Review: approved"
-                              : "Review: flagged concerns"}
-                          </span>
-                        )}
+                      {analysis.status === "complete" && (
+                        <>
+                          <div className="flex flex-wrap items-center gap-3">
+                            {analysis.review_approved !== null && (
+                              <span
+                                className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  analysis.review_approved
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {analysis.review_approved
+                                  ? "Review: approved"
+                                  : "Review: flagged concerns"}
+                              </span>
+                            )}
 
-                        {analysis.proposal && (
+                            {findingsState[analysis.id] === "ready" && (
+                              <div className="ml-auto flex items-center gap-3 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopy(analysis)}
+                                  className={`font-medium text-gray-500 hover:text-gray-700 ${FOCUS_RING}`}
+                                >
+                                  {copiedId === analysis.id
+                                    ? "Copied!"
+                                    : "Copy report"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadPdf(analysis)}
+                                  className={`font-medium text-gray-500 hover:text-gray-700 ${FOCUS_RING}`}
+                                >
+                                  Download as PDF
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {analysis.proposal && (
+                            <div>
+                              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Proposal
+                              </h3>
+                              <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                                <MarkdownProposal content={analysis.proposal} />
+                              </div>
+                            </div>
+                          )}
+
                           <div>
                             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              Proposal
+                              Findings
                             </h3>
-                            <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
-                              <MarkdownProposal content={analysis.proposal} />
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            Findings
-                          </h3>
-                          {findingsState[analysis.id] === "loading" && (
-                            <p className="text-sm text-gray-500">Loading...</p>
-                          )}
-                          {findingsState[analysis.id] === "error" && (
-                            <p role="alert" className="text-sm text-red-600">
-                              Failed to load findings.
-                            </p>
-                          )}
-                          {findingsState[analysis.id] === "ready" &&
-                            (findingsByAnalysis[analysis.id].length === 0 ? (
+                            {findingsState[analysis.id] === "loading" && (
                               <p className="text-sm text-gray-500">
-                                No findings reported.
+                                Loading...
                               </p>
-                            ) : (
-                              <ul className="space-y-2">
-                                {findingsByAnalysis[analysis.id].map(
-                                  (finding) => (
-                                    <li
-                                      key={finding.id}
-                                      className="rounded-md border border-gray-200 bg-white px-3 py-2"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <span
-                                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[finding.severity]}`}
-                                        >
-                                          {finding.severity}
-                                        </span>
-                                        <span className="text-xs text-gray-500">
-                                          {finding.agent_name}
-                                        </span>
-                                        {finding.disputed && (
-                                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                            disputed by review
+                            )}
+                            {findingsState[analysis.id] === "error" && (
+                              <p role="alert" className="text-sm text-red-600">
+                                Failed to load findings.
+                              </p>
+                            )}
+                            {findingsState[analysis.id] === "ready" &&
+                              (findingsByAnalysis[analysis.id].length === 0 ? (
+                                <p className="text-sm text-gray-500">
+                                  No findings reported.
+                                </p>
+                              ) : (
+                                <ul className="space-y-2">
+                                  {findingsByAnalysis[analysis.id].map(
+                                    (finding) => (
+                                      <li
+                                        key={finding.id}
+                                        className="rounded-md border border-gray-200 bg-white px-3 py-2"
+                                      >
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span
+                                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[finding.severity]}`}
+                                          >
+                                            {finding.severity}
                                           </span>
-                                        )}
-                                      </div>
-                                      <p className="mt-1 text-sm font-medium text-gray-900">
-                                        {finding.title}
-                                      </p>
-                                      {finding.detail !== finding.title && (
-                                        <p className="mt-0.5 text-sm text-gray-600">
-                                          {finding.detail}
+                                          <span className="text-xs text-gray-500">
+                                            {finding.agent_name}
+                                          </span>
+                                          {finding.disputed && (
+                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                              disputed by review
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="mt-1 text-sm font-medium text-gray-900">
+                                          {finding.title}
                                         </p>
-                                      )}
-                                    </li>
-                                  ),
-                                )}
-                              </ul>
-                            ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                                        {finding.detail !== finding.title && (
+                                          <p className="mt-0.5 text-sm text-gray-600">
+                                            {finding.detail}
+                                          </p>
+                                        )}
+                                      </li>
+                                    ),
+                                  )}
+                                </ul>
+                              ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Print-only view: populated by "Download as PDF", never shown
+        on-screen. window.print() (triggered in the effect above) is what
+        actually turns this into a PDF via the browser's own print/save
+        dialog — no PDF-rendering dependency needed. */}
+      {printTarget && (
+        <div className="hidden print:block">
+          <MarkdownProposal
+            content={buildReportMarkdown(
+              printTarget.analysis,
+              printTarget.findings,
+            )}
+          />
+        </div>
       )}
-    </div>
+    </>
   );
 }
