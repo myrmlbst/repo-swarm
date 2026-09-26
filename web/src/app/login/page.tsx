@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FOCUS_RING } from "@/lib/styles";
 import { Wordmark } from "@/components/Wordmark";
@@ -9,7 +9,7 @@ import {
   CheckIcon,
   EyeIcon,
   EyeOffIcon,
-  GitHubIcon,
+  // GitHubIcon, // re-enable with the GitHub button below
   SpinnerIcon,
 } from "@/components/icons";
 
@@ -40,8 +40,23 @@ export default function LoginPage() {
     text: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  // const [githubLoading, setGithubLoading] = useState(false);
 
   const supabase = createClient();
+
+  // Errors from the OAuth round-trip arrive as ?error=… (our callback route)
+  // or #error_description=… (Supabase, e.g. a redirect URL that isn't allowed).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const text =
+      params.get("error") ??
+      hash.get("error_description") ??
+      params.get("error_description");
+    if (!text) return;
+    setMessage({ kind: "error", text });
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -71,12 +86,25 @@ export default function LoginPage() {
     window.location.href = "/";
   }
 
-  async function handleGithubLogin() {
-    await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-  }
+  // GitHub login is disabled for now (needs a GitHub OAuth App + Supabase
+  // provider setup, see README). Uncomment this, the state above, the
+  // GitHubIcon import and the button in the JSX to bring it back.
+  // async function handleGithubLogin() {
+  //   setGithubLoading(true);
+  //   setMessage(null);
+  //
+  //   const { error } = await supabase.auth.signInWithOAuth({
+  //     provider: "github",
+  //     options: { redirectTo: `${window.location.origin}/auth/callback` },
+  //   });
+  //
+  //   // On success the browser is already navigating to GitHub, so only reset
+  //   // the button if something went wrong.
+  //   if (error) {
+  //     setGithubLoading(false);
+  //     setMessage({ kind: "error", text: error.message });
+  //   }
+  // }
 
   return (
     <main
@@ -152,13 +180,19 @@ export default function LoginPage() {
               </p>
             </div>
 
+            {/* GitHub login disabled for now — uncomment to re-enable.
             <button
               type="button"
               onClick={handleGithubLogin}
-              className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 active:bg-black ${FOCUS_RING}`}
+              disabled={githubLoading}
+              className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 active:bg-black disabled:cursor-not-allowed disabled:opacity-60 ${FOCUS_RING}`}
             >
-              <GitHubIcon className="size-4" />
-              Continue with GitHub
+              {githubLoading ? (
+                <SpinnerIcon className="size-4 animate-spin" />
+              ) : (
+                <GitHubIcon className="size-4" />
+              )}
+              {githubLoading ? "Redirecting..." : "Continue with GitHub"}
             </button>
 
             <div className="flex items-center gap-3 text-xs text-gray-600">
@@ -166,6 +200,7 @@ export default function LoginPage() {
               or
               <div className="h-px flex-1 bg-gray-200" />
             </div>
+            */}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
