@@ -16,9 +16,8 @@ create table if not exists analysis_runs (
   agent_name text not null,
   status text not null check (status in ('complete', 'failed')),
   error text,
-  -- Not populated yet — needs a signature change through callTool.ts and
-  -- every agent to actually capture; the columns exist to match the design
-  -- (DESIGNDOC.md § 4) without guessing values in the meantime.
+  -- Populated by agents/src/worker.ts from each agent's captured usage;
+  -- null for a run that failed before returning any (e.g. an agent that threw).
   tokens_used integer,
   cost_usd numeric,
   retrieval_count integer,

@@ -96,7 +96,23 @@ function taskFor(tasks: Task[], agent: Task["agent"]): Task | undefined {
   return tasks.find((t) => t.agent === agent);
 }
 
-/** Wraps one agent's run() with timing, recorded into `runs`. */
+/** Rejection type that keeps the runs recorded before a failure, so the worker can still persist a trace. */
+export class OrchestratorError extends Error {
+  constructor(
+    message: string,
+    readonly runs: AgentRunRecord[],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "OrchestratorError";
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Wraps one agent's run() with timing, recorded into `runs` (on failure too, before rethrowing). */
 async function runTimed(
   task: Task,
   request: AgentRequest,
@@ -104,15 +120,28 @@ async function runTimed(
   runs: AgentRunRecord[],
 ): Promise<AgentResult> {
   const startedAt = new Date().toISOString();
-  const result = await agentRegistry[task.agent].run({
-    request,
-    task: task.task,
-    priorResults,
-  });
+  let result: AgentResult;
+  try {
+    result = await agentRegistry[task.agent].run({
+      request,
+      task: task.task,
+      priorResults,
+    });
+  } catch (error) {
+    runs.push({
+      agent: task.agent,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "failed",
+      error: errorMessage(error),
+    });
+    throw error;
+  }
   runs.push({
     agent: task.agent,
     startedAt,
     finishedAt: new Date().toISOString(),
+    status: "complete",
     usage: result.usage,
     retrievalCount: result.retrievalCount,
   });
@@ -123,15 +152,16 @@ async function runTimed(
  * Runs the specialist agents in the fixed dependency order from
  * DESIGNDOC.md § 3: code_agent (alone) -> {cloud_agent, security_agent} (in
  * parallel) -> architecture_agent -> review_agent. Any agent not present in
- * the plan is simply skipped. If any agent throws, this rejects — there's
- * no partial-failure handling yet (see AgentRunRecord's doc comment).
+ * the plan is simply skipped. If any agent throws, this rejects (no later
+ * stage runs), but every run recorded so far — including the failed one —
+ * has already been pushed onto the caller's `runs` array.
  */
 async function executePlan(
   request: AgentRequest,
   plan: TaskPlan,
-): Promise<{ results: AgentResult[]; runs: AgentRunRecord[] }> {
+  runs: AgentRunRecord[],
+): Promise<AgentResult[]> {
   const results: AgentResult[] = [];
-  const runs: AgentRunRecord[] = [];
 
   const codeTask = taskFor(plan.tasks, "code_agent");
   if (codeTask) {
@@ -144,10 +174,18 @@ async function executePlan(
   ].filter((t): t is Task => t !== undefined);
 
   if (parallelTasks.length > 0) {
-    const parallelResults = await Promise.all(
+    // allSettled, not all: if one agent fails the other still runs to
+    // completion, so its run record (and cost) lands in `runs` before we throw.
+    const settled = await Promise.allSettled(
       parallelTasks.map((t) => runTimed(t, request, results, runs)),
     );
-    results.push(...parallelResults);
+    const failed = settled.find(
+      (s): s is PromiseRejectedResult => s.status === "rejected",
+    );
+    if (failed) throw failed.reason;
+    for (const s of settled) {
+      if (s.status === "fulfilled") results.push(s.value);
+    }
   }
 
   const architectureTask = taskFor(plan.tasks, "architecture_agent");
@@ -160,21 +198,41 @@ async function executePlan(
     results.push(await runTimed(reviewTask, request, results, runs));
   }
 
-  return { results, runs };
+  return results;
 }
 
 export async function runOrchestrator(
   request: AgentRequest,
 ): Promise<OrchestratorResult> {
-  const planStartedAt = new Date().toISOString();
-  const { plan, usage: planUsage } = await planWithClaude(request);
-  const orchestratorRun: AgentRunRecord = {
-    agent: "orchestrator",
-    startedAt: planStartedAt,
-    finishedAt: new Date().toISOString(),
-    usage: planUsage,
-  };
+  const runs: AgentRunRecord[] = [];
 
-  const { results, runs } = await executePlan(request, plan);
-  return { plan, results, runs: [orchestratorRun, ...runs] };
+  const planStartedAt = new Date().toISOString();
+  let plan: TaskPlan;
+  try {
+    const planned = await planWithClaude(request);
+    plan = planned.plan;
+    runs.push({
+      agent: "orchestrator",
+      startedAt: planStartedAt,
+      finishedAt: new Date().toISOString(),
+      status: "complete",
+      usage: planned.usage,
+    });
+  } catch (error) {
+    runs.push({
+      agent: "orchestrator",
+      startedAt: planStartedAt,
+      finishedAt: new Date().toISOString(),
+      status: "failed",
+      error: errorMessage(error),
+    });
+    throw new OrchestratorError(errorMessage(error), runs, { cause: error });
+  }
+
+  try {
+    const results = await executePlan(request, plan, runs);
+    return { plan, results, runs };
+  } catch (error) {
+    throw new OrchestratorError(errorMessage(error), runs, { cause: error });
+  }
 }

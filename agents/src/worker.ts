@@ -10,7 +10,8 @@
  */
 import { redis } from "./lib/redisClient";
 import { supabaseAdmin } from "./lib/supabaseAdmin";
-import { runOrchestrator } from "./orchestrator";
+import { OrchestratorError, runOrchestrator } from "./orchestrator";
+import type { AgentRunRecord } from "./types";
 import { estimateCostUsd } from "./lib/pricing";
 import { env } from "./env";
 import type {
@@ -118,6 +119,41 @@ function findingsFromResults(
   return rows;
 }
 
+async function persistRuns(
+  analysisId: string,
+  runs: AgentRunRecord[],
+): Promise<void> {
+  const runRows = runs.map((r) => {
+    const tokensUsed = r.usage
+      ? r.usage.inputTokens + r.usage.outputTokens
+      : null;
+    const costUsd = r.usage
+      ? estimateCostUsd(
+          env.ANTHROPIC_MODEL,
+          r.usage.inputTokens,
+          r.usage.outputTokens,
+        )
+      : null;
+
+    return {
+      analysis_id: analysisId,
+      agent_name: r.agent,
+      status: r.status,
+      error: r.error ?? null,
+      started_at: r.startedAt,
+      finished_at: r.finishedAt,
+      tokens_used: tokensUsed,
+      cost_usd: costUsd,
+      retrieval_count: r.retrievalCount ?? null,
+    };
+  });
+  if (runRows.length === 0) return;
+
+  const { error } = await supabaseAdmin.from("analysis_runs").insert(runRows);
+  if (error)
+    console.error(`[worker] failed to insert analysis_runs:`, error.message);
+}
+
 async function processAnalysis(analysisId: string): Promise<void> {
   console.log(`[worker] processing analysis ${analysisId}`);
 
@@ -167,39 +203,7 @@ async function processAnalysis(analysisId: string): Promise<void> {
         console.error(`[worker] failed to insert findings:`, error.message);
     }
 
-    const runRows = runs.map((r) => {
-      const tokensUsed = r.usage
-        ? r.usage.inputTokens + r.usage.outputTokens
-        : null;
-      const costUsd = r.usage
-        ? estimateCostUsd(
-            env.ANTHROPIC_MODEL,
-            r.usage.inputTokens,
-            r.usage.outputTokens,
-          )
-        : null;
-
-      return {
-        analysis_id: analysisId,
-        agent_name: r.agent,
-        status: "complete" as const,
-        started_at: r.startedAt,
-        finished_at: r.finishedAt,
-        tokens_used: tokensUsed,
-        cost_usd: costUsd,
-        retrieval_count: r.retrievalCount ?? null,
-      };
-    });
-    if (runRows.length > 0) {
-      const { error } = await supabaseAdmin
-        .from("analysis_runs")
-        .insert(runRows);
-      if (error)
-        console.error(
-          `[worker] failed to insert analysis_runs:`,
-          error.message,
-        );
-    }
+    await persistRuns(analysisId, runs);
 
     await supabaseAdmin
       .from("analyses")
@@ -214,6 +218,10 @@ async function processAnalysis(analysisId: string): Promise<void> {
     console.log(`[worker] completed analysis ${analysisId}`);
   } catch (error) {
     console.error(`[worker] analysis ${analysisId} failed:`, error);
+    // Keep the trace for the runs that did happen (incl. the one that failed).
+    if (error instanceof OrchestratorError) {
+      await persistRuns(analysisId, error.runs);
+    }
     await supabaseAdmin
       .from("analyses")
       .update({ status: "failed", completed_at: new Date().toISOString() })

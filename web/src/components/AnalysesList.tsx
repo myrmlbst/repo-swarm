@@ -177,7 +177,7 @@ export function AnalysesList() {
     }
     setExpandedId(analysis.id);
 
-    if (analysis.status !== "complete") return;
+    if (analysis.status !== "complete" && analysis.status !== "failed") return;
 
     const supabase = createClient();
     const {
@@ -185,7 +185,7 @@ export function AnalysesList() {
     } = await supabase.auth.getSession();
     if (!session) return;
 
-    if (!findingsByAnalysis[analysis.id]) {
+    if (analysis.status === "complete" && !findingsByAnalysis[analysis.id]) {
       setFindingsState((s) => ({ ...s, [analysis.id]: "loading" }));
       try {
         const { findings } = await getFindings(
@@ -376,10 +376,22 @@ export function AnalysesList() {
                             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
                             <p>
                               This analysis failed before producing a result.
-                              Check the agents worker&apos;s logs for the error.
+                              The usage table below shows which agent failed;
+                              the agents worker&apos;s logs have the full error.
                             </p>
                           </div>
                         )}
+
+                        {analysis.status === "failed" &&
+                          traceState[analysis.id] === "ready" &&
+                          traceByAnalysis[analysis.id].length > 0 && (
+                            <PanelSection title="Usage & cost">
+                              <UsageSummary
+                                runs={traceByAnalysis[analysis.id]}
+                                totalElapsedMs={totalElapsed}
+                              />
+                            </PanelSection>
+                          )}
 
                         {analysis.status === "complete" && (
                           <>

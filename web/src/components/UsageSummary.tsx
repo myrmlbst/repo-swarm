@@ -84,19 +84,36 @@ export function UsageSummary({
                   className="px-2 py-2 sm:px-3 text-left font-medium text-gray-900"
                 >
                   {agentLabel(run.agent_name)}
+                  {run.status === "failed" && (
+                    <span className="mt-0.5 block text-xs font-normal text-red-700">
+                      Failed{run.error ? `: ${run.error}` : ""}
+                    </span>
+                  )}
                 </th>
                 <td className="px-2 py-2 sm:px-3 text-right text-gray-700 tabular-nums">
                   {formatDuration(elapsedMs(run.started_at, run.finished_at))}
                 </td>
                 <td className="px-2 py-2 sm:px-3 text-right text-gray-700 tabular-nums">
                   {run.tokens_used === null ? (
-                    <Cached />
+                    run.status === "failed" ? (
+                      "—"
+                    ) : (
+                      <Cached />
+                    )
                   ) : (
                     formatCount(run.tokens_used)
                   )}
                 </td>
                 <td className="px-2 py-2 sm:px-3 text-right text-gray-700 tabular-nums">
-                  {run.cost_usd === null ? <Cached /> : formatUsd(run.cost_usd)}
+                  {run.cost_usd === null ? (
+                    run.status === "failed" ? (
+                      "—"
+                    ) : (
+                      <Cached />
+                    )
+                  ) : (
+                    formatUsd(run.cost_usd)
+                  )}
                 </td>
               </tr>
             ))}

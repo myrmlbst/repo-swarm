@@ -111,7 +111,7 @@ ${expected.map((f, i) => `${i}. ${f}`).join("\n")}
 Actual findings:
 ${actual.map((f, i) => `${i}. ${f}`).join("\n")}`;
 
-  const input = await callClaudeTool({
+  const { input } = await callClaudeTool({
     system: SYSTEM_PROMPT,
     user,
     tool: SCORE_TOOL,

@@ -57,15 +57,17 @@ export interface SpecialistAgent {
 
 /**
  * Per-agent timing for `analysis_runs` (DESIGNDOC.md § 4) — recorded around
- * each agent's `run()` call in orchestrator.ts. Only covers the success
- * path: if an agent throws, `runOrchestrator` itself rejects and there's no
- * partial `runs` array to return (see orchestrator.ts's module comment).
+ * each agent's `run()` call in orchestrator.ts. A failed agent still gets a
+ * record (`status: "failed"` + `error`); `runOrchestrator` then rejects with
+ * an `OrchestratorError` carrying every record collected up to that point.
  */
 export interface AgentRunRecord {
   /** "orchestrator" covers the task-planning call itself, not one of the five specialist agents. */
   agent: AgentName | "orchestrator";
   startedAt: string;
   finishedAt: string;
+  status: "complete" | "failed";
+  error?: string;
   usage?: Usage;
   retrievalCount?: number;
 }
