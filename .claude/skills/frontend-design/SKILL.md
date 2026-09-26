@@ -40,6 +40,14 @@ node .claude/skills/frontend-design/scripts/screenshot-pages.mjs http://localhos
 
 (Replace the port with whatever the web server is actually bound to.) This captures `/login`, the empty dashboard, and the dashboard with one submitted analysis — each at a 375px mobile width and a 1280px desktop width — using a throwaway confirmed Supabase test user it creates and deletes itself. Output goes to `.claude/skills/frontend-design/last-run/` (gitignored — it's scan output, not source).
 
+That script only ever sees a freshly-queued row. To review the *result* states (running / failed / completed rows, and a completed row expanded to its proposal, findings and usage table), also run:
+
+```bash
+node .claude/skills/frontend-design/scripts/screenshot-results.mjs http://localhost:3100
+```
+
+It seeds those rows for a throwaway user (via `_shared/seed-results.mjs`, copying a real completed analysis as the template when one exists) and captures viewport-sized segments as it scrolls, because a full-page shot of an expanded report is thousands of pixels tall and unreadable once downscaled.
+
 **Look at every screenshot with the Read tool.** A script that "ran successfully" proves nothing about the actual visual output — you have to look.
 
 ## 5. Compare against the conventions and fix

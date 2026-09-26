@@ -59,6 +59,16 @@ node .claude/skills/accessibility-review/scripts/audit.mjs http://localhost:3100
 
 This scans three states — `/login`, the dashboard with zero analyses, and the dashboard with one submitted analysis (so the status-badge and list-item markup gets covered too) — using a throwaway confirmed Supabase test user it creates and deletes itself via the service-role key in `api/.env`. Output: a violation summary on stdout, screenshots, and `report.json`, all written to `.claude/skills/accessibility-review/last-run/` (gitignored — it's scan output, not source). Exit code is non-zero if anything **serious** or **critical** was found.
 
+Also run the results-state audit, since `audit.mjs` never expands a result card and that's where the densest markup lives (findings list, `<details>` group, usage table):
+
+```bash
+node .claude/skills/accessibility-review/scripts/audit-results.mjs http://localhost:3100
+```
+
+It seeds a running, a failed and a completed analysis for a throwaway user (via `_shared/seed-results.mjs`), runs axe on the collapsed list, the failed panel and the fully expanded completed panel at desktop and mobile widths, and also asserts what axe can't: toggle `aria-expanded`/`aria-controls` wiring, a single `<h1>` with no skipped heading levels, Enter operating the toggle, a painted focus outline, and the skip link being the first Tab stop and moving focus to `<main>`. Exit code is non-zero on any serious/critical violation or failed check.
+
+Note axe reports text over gradients/translucent layers as `incomplete` rather than a violation — measure those by hand (sample the rendered background pixels behind the text) instead of trusting a clean scan.
+
 ## 4. Fix what it finds
 
 For each violation in the report:
