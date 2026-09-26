@@ -50,9 +50,12 @@ Build order: get the vertical slice working end to end first (API → orchestrat
 
 ## Getting Started
 
-Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.
+<details>
+<summary>Method 1: Run All Bash Scripts Manually</summary>
 
-Prerequisites also: an [Upstash](https://upstash.com) Redis database (free tier) — backs rate limiting, quotas, and `code_agent`'s caching.
+- Prerequisites: Node 20+, a [Supabase](https://supabase.com) project.
+
+- Prerequisites also: an [Upstash](https://upstash.com) Redis database (free tier) — backs rate limiting, quotas, and `code_agent`'s caching.
 
 1. In the Supabase dashboard: run `supabase/migrations/0001_init.sql` through `0004_analysis_results.sql`, in order, in the SQL editor (`0002` enables `pgvector` for RAG, `0003` adds quota tracking, `0004` adds `analysis_runs`/`findings` and the `analyses.proposal`/`review_approved` columns).
 2. `cd api && cp .env.example .env` and fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API) and `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (from your Upstash database).
@@ -62,14 +65,17 @@ Prerequisites also: an [Upstash](https://upstash.com) Redis database (free tier)
 6. `cd agents && cp .env.example .env` and fill in `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` ([voyageai.com](https://www.voyageai.com)), `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (same project as step 2), and `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (same Upstash database as step 2). Then `npm install`.
 7. `npm run seed-knowledge` (from `agents/`) — one-time: embeds and indexes the `cloud_docs`/`security` corpus. Re-run any time you edit `agents/knowledge/`.
 8. `npm run worker` (from `agents/`) — starts the queue consumer that actually processes analyses submitted through the API (step 3's `POST /v1/analyses` just queues them; this is what picks them up). Needs to be running for the web app or a direct `curl` to `api/` to produce a real result — see [System Architecture](#system-architecture) below.
+</details>
 
-Or use the [`scripts/`](scripts/) wrappers instead of steps 2–6 and 8:
+
+<details>
+<summary>Method 2: Use the `scripts/` Wrappers Instead of Steps 2–6 and 8:</summary>
 
 - `scripts/setup.sh` — installs dependencies in `api/`, `web/`, and `agents/`, and creates any missing `.env` files from their `.example` counterparts (never overwrites an existing one).
 - `scripts/dev.sh` — starts `api/`, `web/`, **and** the `agents/` worker together (Ctrl-C stops all three) — this is the one that gives you the actual working product.
 - `scripts/agents.sh <repo_url> "<question>"` — runs the orchestrator standalone via `agents/`'s `npm run dev`, independent of the API/queue/worker entirely — useful for testing agent changes directly.
 
-Open the frontend, sign up with email/password (or GitHub, once configured — see below), and submit a repo URL — with the worker running, it'll actually process and the dashboard will show a real result once it completes (usually 1-2 minutes). To drive the API directly instead:
+Open the frontend, sign up with email/password, and submit a repo URL — with the worker running, it'll actually process and the dashboard will show a real result once it completes (usually 1-2 minutes). To drive the API directly instead:
 
 ```bash
 curl -X POST http://localhost:3000/v1/analyses \
@@ -79,8 +85,7 @@ curl -X POST http://localhost:3000/v1/analyses \
 ```
 
 where `$ACCESS_TOKEN` is the `access_token` from a Supabase `signInWithPassword`/`signUp` call.
-
-**To enable "Continue with GitHub"**: create a GitHub OAuth App (github.com/settings/developers) with callback URL `https://<project-ref>.supabase.co/auth/v1/callback`; paste its Client ID/Secret into Supabase's Authentication → Providers → GitHub; then add your frontend's `/auth/callback` URL (e.g. `http://localhost:3000/auth/callback`) to Authentication → URL Configuration → Redirect URLs.
+</details>
 
 ## System Architecture
 
@@ -164,35 +169,28 @@ flowchart TD
 
 ## Example Flow
 
-Imagine a developer connects a repository and asks:
-
-> "How should I deploy this application securely on AWS, and what changes should I make before production?"
-
-The system might work like this:
+A developer connects a repo and asks: *"How should I deploy this securely on AWS, and what should I change before production?"*
 
 ```text
-Developer
-   │
-   ▼
-Orchestrator
-   │
-   ├───────────────┬────────────────┬────────────────
-   ▼               ▼                ▼
-Code Agent     Cloud Agent      Security Agent
-   │               │                │
-   ▼               ▼                ▼
-Code RAG        AWS RAG         Security RAG
-   │               │                │
-   └───────────────┴────────────────┘
-                   │
-                   ▼
-            Architecture Agent
-                   │
-                   ▼
-              Review Agent
-                   │
-                   ▼
-             Final Proposal
+Orchestrator            plans which agents to run
+    │
+    ▼
+Code Agent              RAG over the repo's own source
+    │
+    ├───────────────┐   run in parallel, both read the Code Agent's findings
+    ▼               ▼
+Cloud Agent     Security Agent
+(cloud docs)    (security checklist)
+    │               │
+    └───────┬───────┘
+            ▼
+    Architecture Agent  reconciles both into one proposal
+            │
+            ▼
+      Review Agent      flags claims the Code Agent's findings don't support
+            │
+            ▼
+     Final Proposal
 ```
 
 ## 1. The Orchestrator Agent
@@ -438,10 +436,10 @@ It combines them into one coherent architecture:
                      /       |        \
                     /        |         \
                    ▼         ▼          ▼
-             RDS PostgreSQL Redis    OpenAI API
+            RDS PostgreSQL  Redis    OpenAI API
                    │
                    ▼
-              Private Subnet
+            Private Subnet
 ```
 
 Supporting services:
