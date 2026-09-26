@@ -135,11 +135,8 @@ Run the full pipeline against each golden repo and score precision/recall of the
 
 **Status: implemented, not yet run to completion.** `agents/eval/` — 5 hand-crafted fixtures (`golden-repos/*/files/`) with a hand-labeled `expected-findings.json` each (JSON instead of the YAML sketched above — no YAML parser dependency existed, JSON is equally hand-labeled). `eval/run.ts` scaffolds each fixture into a real temp git repo (`eval/lib/scaffoldRepo.ts`), runs `code_agent` → `{cloud_agent, security_agent}` directly — bypassing the orchestrator's LLM planning step, since the eval wants fixed, deterministic agent selection, not whatever a given run's planner chooses — and scores the collected findings against the expected list with an LLM judge (`eval/lib/judge.ts`, semantic match via a forced tool call, not exact string match). `npm run eval`. The scaffolding/clone/index infra is verified working (confirmed live, up through a real Claude call), but no run has finished with real recorded scores yet — not wired into CI either, since there's no CI workflow yet (§ 10).
 
-## 9. Deployment
 
-Containerize the API + agent workers separately (the agent workers are the long-running, LLM-call-heavy part; keep them able to scale independently of the API). Deploy on ECS Fargate behind an ALB, RDS for Postgres, ElastiCache for Redis, Secrets Manager for API keys/LLM credentials — i.e., dogfood the same architecture the Cloud Agent recommends to its users.
-
-## 10. Build Order
+## 9. Build Order
 
 1. **Vertical slice.** `POST /analyses` → Orchestrator → Code Agent → RAG over one indexed repo → Cloud Agent → raw JSON response. No auth, no UI, no caching.
    - Status: done, and beyond — `POST /v1/analyses` is now genuinely wired to the orchestrator (via a Redis queue + `agents/src/worker.ts`, not the raw-JSON-response shape originally sketched here — a real DB-persisted result instead). Verified live end to end.
@@ -152,9 +149,3 @@ Containerize the API + agent workers separately (the agent workers are the long-
 5. **Deployment.** Containerize and deploy for real; wire up the trace/cost dashboard.
    - Status: not started. `GET /v1/analyses/{id}/trace` exists (§ 5) and returns real per-agent timing, but has no `tokens_used`/`cost_usd` yet (§ 4) and no dashboard UI consumes it.
 6. **Stretch.** GitHub PR webhook + auto-comment loop; MCP servers in place of direct SDK calls.
-
-## 11. Open Questions
-
-- Which LLM(s) for which agent — decided for the orchestrator itself: Claude, via `@anthropic-ai/sdk` (model configurable through `ANTHROPIC_MODEL` in `agents/.env`), used for task planning. The README's "Claude for architecture, GPT for code analysis, a smaller model for classification" split is still open for the specialist agents once they get real implementations — needs a cost comparison before agent 3.
-- Multi-tenant repo re-indexing: if the same repo is submitted twice, re-index from scratch or diff against the last indexed commit? Affects both cost and the caching design in §6.
-- How much of the Review Agent's critique is shown to the end user vs. used only to filter the Architecture Agent's output before it's returned?

@@ -34,8 +34,7 @@ The capstone requires all of the following concepts. Most are ordinary applicati
 | Authentication         | Supabase Auth (session JWT) + API keys for programmatic access — [`api/src/lib/auth.ts`](api/src/lib/auth.ts), [`api/src/lib/apiKeys.ts`](api/src/lib/apiKeys.ts)                                                                                                                      |
 | Reporting — PDF        | Each completed analysis can be copied as one Markdown report or downloaded as a PDF (browser print-to-PDF, no rendering dependency) — [`web/src/components/AnalysesList.tsx`](web/src/components/AnalysesList.tsx), [`web/src/lib/report.ts`](web/src/lib/report.ts)                   |
 | Caching                | Redis in front of the API/DB — cache structured per-repo facts, not raw Q&A strings (low hit rate on natural-language queries)                                                                                                                                                         |
-| Rate limiting / quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware                                                                                                                                                                            |
-| Deployment             | Containerized, deployed on the same ECS/Fargate/RDS pattern the Cloud Agent recommends to others                                                                                                                                                                                       |
+| Rate limiting / quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware                                                                                                                                                                                                               |
 
 **Agent Layer**
 
@@ -152,16 +151,11 @@ flowchart TD
     Cloud -.scored by.-> E
     Sec -.scored by.-> E
 
-    subgraph DeployLayer["Deployment (planned, not yet live)"]
-        ALB[ALB] --> ECS[ECS Fargate]
-    end
-    ECS -.would host.-> API
-
     classDef planned fill:#f5f5f5,stroke:#999,stroke-dasharray: 4 3,color:#666
-    class GH,Incidents,ALB,ECS planned
+    class GH,Incidents planned
 ```
 
-- **Solid arrows** are a direct call. **Dashed arrows** are retrieval, scoring, polling, or a planned/not-yet-built relationship (greyed nodes are planned, not implemented — the webhook, the `incidents` collection, and the ECS/ALB deployment).
+- **Solid arrows** are a direct call. **Dashed arrows** are retrieval, scoring, polling, or a planned/not-yet-built relationship (greyed nodes are planned, not implemented — the webhook and the `incidents` collection).
 - `POST /v1/analyses` doesn't call the orchestrator directly — it enqueues a job ID in Redis and returns immediately. A separate, independently-running worker process polls that queue and runs the orchestrator; the worker writes results straight to Postgres, not back through the API. This split is real, not a simplification — it's why the worker needs its own restart when e.g. an API key changes, independent of the API server.
 - Code Agent runs first; Cloud and Security agents fan out in parallel off its output, then Architecture and Review run sequentially.
 - The injection/redaction guardrail sits only on Code Agent, the one agent that reads raw repo content. Security Agent never sees the repo directly — only Code Agent's already-processed facts plus trusted internal docs.
