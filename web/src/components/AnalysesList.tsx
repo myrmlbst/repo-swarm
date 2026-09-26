@@ -376,8 +376,6 @@ export function AnalysesList() {
                             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
                             <p>
                               This analysis failed before producing a result.
-                              The usage table below shows which agent failed;
-                              the agents worker&apos;s logs have the full error.
                             </p>
                           </div>
                         )}
