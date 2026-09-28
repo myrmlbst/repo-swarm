@@ -6,9 +6,9 @@
 
 Shipping an application to production securely requires knowledge that spans three different domains at once: the codebase itself, cloud infrastructure, and security best practices. Most solo developers and small teams don't have a dedicated DevOps or security engineer to cover all three before launch. Manually auditing a repo for deployment-readiness and security gaps is slow, inconsistent, and easy to get wrong under deadline pressure. Generic AI code-review tools give shallow advice because they run one prompt over an entire repo instead of retrieving the specific context each concern actually needs.
 
-**Who has this problem:** solo developers and small engineering teams without a dedicated DevOps or security engineer, who are about to take a side project or MVP to production and need an AWS deployment and security review before launch.
+**Who has this problem:** Solo developers and small engineering teams without a dedicated DevOps or security engineer, who are about to take a side project or MVP to production and need an AWS deployment and security review before launch.
 
-**The 10x claim:** what normally takes a senior engineer hours of manual work (reading the codebase, researching the right AWS services, checking for OWASP-style security issues, and writing up a coherent proposal) comes back instead as a reviewed, source-cited architecture proposal in under a minute.
+**The 10x claim:** What normally takes a senior engineer hours of manual work (reading the codebase, researching the right AWS services, checking for OWASP-style security issues, and writing up a coherent proposal) comes back instead as a reviewed, source-cited architecture proposal in under a minute.
 
 **Non-goal:** Repo Swarm does not execute any changes it recommends (no auto-PRs, no infrastructure provisioning). It produces a reviewed proposal for a human to act on; it does not act on the repo or cloud account itself.
 
@@ -40,8 +40,7 @@ Beyond the core seven, two additional concepts from the swap table are also impl
 |---|---|---|
 | RAG with citations | The core of the product's value: proposals are grounded in retrieved AWS/security docs and the repo's own code, not model memory alone | `agents/src/lib/rag/`: Voyage embeddings + pgvector, namespaced per collection |
 | Agent with guardrails | Directly required by working over untrusted, arbitrary GitHub repos: an agent that reads code it doesn't control needs limits | prompt-injection filtering + secret redaction on the Code and Security agents |
-
-Rate limiting/quotas and containerized deployment are partially built (real per-user/API-key limits are enforced; a Docker/ECS deployment is designed in `DESIGNDOC.md` but not yet live) and are called out as in-progress rather than claimed as finished.
+| Rate Limiting / Quotas | Real per-user/API-key limits on analyses and tokens per period, enforced with counters, not just middleware | limits on tokens per certain periods of time |
 
 ## 3. How to Run It
 
@@ -57,4 +56,4 @@ Open the web app, sign up, and submit a GitHub repo URL; the worker will process
 
 ## 4. Current Limitations
 
-In the interest of an honest scope: the golden-repo evaluation suite is built but hasn't produced a clean full run yet; per-agent token/cost/latency tracing has a route but no data behind it yet, since it depends on the orchestrator being fully wired in; and containerized deployment to a free hosting tier is designed but not yet live. These are tracked as open work, not claimed as done.
+In the interest of an honest scope: the golden-repo evaluation suite is built but hasn't produced a clean full run yet, and it isn't wired into CI. This is tracked as open work, not claimed as done.

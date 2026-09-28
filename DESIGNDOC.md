@@ -145,7 +145,7 @@ Run the full pipeline against each golden repo and score precision/recall of the
 3. **Productization.** Auth, API keys, Postgres persistence, rate limiting/quotas, Redis caching.
    - Status: done. Postgres persistence of analysis results specifically landed via `supabase/migrations/0004_analysis_results.sql` + the worker — `analyses.proposal`/`review_approved`, `analysis_runs`, `findings` all populated on a real run. Auth, API keys, rate limiting/quotas (§ 5), and Redis caching (§ 6) were already done and verified live.
 4. **Quality layer.** Guardrails (injection test + redaction), golden-repo eval suite wired into CI.
-   - Status: partial. Redaction is fully done; the injection-resistance guardrail exists but has no test (§ 7). The eval suite exists but hasn't completed a scored run yet, and there's no CI to wire it into (§ 10 has no CI-workflow step — worth adding).
+   - Status: partial. Redaction and the injection-resistance guardrail are both fully done, including a passing test for each (§ 7). The eval suite exists but hasn't completed a scored run yet, and there's no CI to wire it into (§ 10 has no CI-workflow step — worth adding).
 5. **Deployment.** Containerize and deploy for real; wire up the trace/cost dashboard.
    - Status: partial. Containerization/deployment hasn't started (scope changed to no deployment). The trace/cost side is done: `GET /v1/analyses/{id}/trace` returns per-agent timing, `tokens_used`, `cost_usd` and `retrieval_count`, failed agents are recorded with `status: "failed"` + `error` (also when the whole analysis fails), and the dashboard's "Usage & cost" table consumes it.
 6. **Stretch.** GitHub PR webhook + auto-comment loop; MCP servers in place of direct SDK calls.
