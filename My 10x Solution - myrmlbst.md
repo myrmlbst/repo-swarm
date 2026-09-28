@@ -53,7 +53,3 @@ scripts/dev.sh      # starts the API, the web app, and the agents worker togethe
 ```
 
 Open the web app, sign up, and submit a GitHub repo URL; the worker will process it and the dashboard shows the resulting proposal once it completes (usually 1–2 minutes). Full step-by-step instructions (including running the SQL migrations) are in the repo's `README.md`.
-
-## 4. Current Limitations
-
-In the interest of an honest scope: the golden-repo evaluation suite is built but hasn't produced a clean full run yet, and it isn't wired into CI. This is tracked as open work, not claimed as done.

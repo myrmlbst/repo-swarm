@@ -1,0 +1,16 @@
+{
+  "ecs-fargate.md": "https://aws.amazon.com/fargate/",
+  "rds.md": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html",
+  "alb.md": "https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html",
+  "secrets-manager.md": "https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html",
+  "iam-least-privilege.md": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html",
+  "vpc-networking.md": "https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html",
+  "elasticache-redis.md": "https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/WhatIs.html",
+  "authentication.md": "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+  "input-validation.md": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+  "rate-limiting.md": "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/",
+  "iam-permissions.md": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html",
+  "secrets-handling.md": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+  "transport-security.md": "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html",
+  "dependency-risk.md": "https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/"
+}

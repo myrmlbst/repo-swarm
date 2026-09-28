@@ -1,11 +1,13 @@
 import type { ComponentType } from "react";
 import type { Finding } from "@/lib/api";
 import { agentLabel } from "@/lib/format";
+import { sourceUrlFor } from "@/lib/sources";
 import { FOCUS_RING } from "@/lib/styles";
 import {
   AlertCircleIcon,
   AlertTriangleIcon,
   ChevronDownIcon,
+  ExternalLinkIcon,
   InfoIcon,
 } from "./icons";
 
@@ -91,14 +93,32 @@ function FindingCard({ finding }: { finding: Finding }) {
       {finding.source_refs.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-gray-600">Sources</span>
-          {finding.source_refs.map((path) => (
-            <code
-              key={path}
-              className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs break-all text-gray-700"
-            >
-              {path}
-            </code>
-          ))}
+          {finding.source_refs.map((path) => {
+            const url = sourceUrlFor(path);
+            // A knowledge-doc citation with a verified external source
+            // (AWS/OWASP) links out; a repo-code path or an internal doc
+            // with no faithful 1:1 source stays a plain, unlinked chip.
+            return url ? (
+              <a
+                key={path}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className={`inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs break-all text-gray-700 hover:bg-gray-200 hover:text-blue-700 ${FOCUS_RING}`}
+              >
+                {path}
+                <ExternalLinkIcon className="size-3 shrink-0" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ) : (
+              <code
+                key={path}
+                className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs break-all text-gray-700"
+              >
+                {path}
+              </code>
+            );
+          })}
         </div>
       )}
     </li>

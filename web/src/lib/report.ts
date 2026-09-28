@@ -1,4 +1,5 @@
 import type { Analysis, Finding } from "./api";
+import { sourceUrlFor } from "./sources";
 
 const SEVERITY_LABEL: Record<Finding["severity"], string> = {
   info: "Info",
@@ -58,7 +59,11 @@ export function buildReportMarkdown(
         lines.push(`  ${finding.detail}`);
       }
       if (finding.source_refs.length > 0) {
-        lines.push(`  Sources: ${finding.source_refs.join(", ")}`);
+        const refs = finding.source_refs.map((path) => {
+          const url = sourceUrlFor(path);
+          return url ? `[${path}](${url})` : path;
+        });
+        lines.push(`  Sources: ${refs.join(", ")}`);
       }
     }
   }
