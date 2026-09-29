@@ -69,7 +69,7 @@ Build order: get the vertical slice working end to end first (API → orchestrat
 
 
 <details>
-<summary>Method 2: Use the `scripts/` Wrappers Instead of Steps 2–6 and 8:</summary>
+<summary>Method 2: Use the `scripts/` Wrappers Instead of Steps 2–6 and 8</summary>
 
 - `scripts/setup.sh` — installs dependencies in `api/`, `web/`, and `agents/`, and creates any missing `.env` files from their `.example` counterparts (never overwrites an existing one).
 - `scripts/dev.sh` — starts `api/`, `web/`, **and** the `agents/` worker together (Ctrl-C stops all three) — this is the one that gives you the actual working product.
@@ -85,6 +85,11 @@ curl -X POST http://localhost:3000/v1/analyses \
 ```
 
 where `$ACCESS_TOKEN` is the `access_token` from a Supabase `signInWithPassword`/`signUp` call.
+</details>
+
+<details>
+<summary>Seeding Data</summary>
+The project does not allow for fake seeding data, as it requires verification via a confirmation link sent to the user's email adress. To sign up, you can use your personal email and verify it.
 </details>
 
 ## System Architecture
