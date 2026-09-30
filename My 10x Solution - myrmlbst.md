@@ -8,12 +8,14 @@ Shipping an application to production securely requires knowledge that spans thr
 
 **Who Has This Problem:** Solo developers and small engineering teams without a dedicated DevOps or security engineer, who are about to take a side project or MVP to production and need an AWS deployment and security review before launch.
 
-**The 10x Claim:** What normally takes a senior engineer hours of manual work (reading the codebase, researching the right AWS services, checking for OWASP-style security issues, and writing up a coherent proposal) comes back instead as a reviewed, source-cited architecture proposal in a minute or less. A much larger codebase with many critical issues may take up to 2 minutes, as documented below:
+**The 10x Claim:** What normally takes a senior engineer hours of manual work (reading the codebase, researching the right AWS services, checking for OWASP-style security issues, and writing up a coherent proposal) comes back instead as a reviewed, source-cited architecture proposal in a minute or less. A much larger codebase with many critical issues may take up to 2-4 minutes, as documented below:
 
 ![Usage and cost breakdown per agent](docs/imgs/usageandcost.jpeg)
 _[Image 1: Total Time Elapsed + Agents' Cost and Token Breakdown]_
 
-**Non-Goal:** Repo Swarm does not execute any changes it recommends (no auto-PRs, no infrastructure provisioning). It produces a reviewed proposal for a human to act on; it does not act on the repo or cloud account itself.
+This project was used recursively for improvements: As I developed it, I would place its GitHub link into the web version and have it return to me any critical mistakes or bugs that needed to be fixed. As of the last time this project was updated, most of the critical/warning findings were those pertaining to containerization and deployment, which are currently out of scope for this capstone.
+
+**Non-Goal:** Repo Swarm does not execute any changes it recommends (no auto-PRs, no infrastructure provisioning). It produces a reviewed proposal for a human to act on and does not act on the repo or cloud account itself.
 
 ## 2. How It Works
 
@@ -21,7 +23,7 @@ Repo Swarm is a multi-agent system: Point it at a GitHub repo, and instead of on
 
 A **Code Agent** indexes the repo (chunk → embed → store in a namespaced vector DB) and extracts structured facts: framework, database, auth mechanism, external services, obvious gaps. **Cloud** and **Security** agents then run in parallel off that output, each retrieving from their own knowledge base (AWS docs; OWASP + internal security policy) instead of the raw repo. An **Architecture Agent** combines their findings into one coherent proposal, and a **Review Agent** critiques that proposal for unsupported claims or invented requirements before it's returned. 
 
-![Agent Findings](docs/imgs/proposal.jpeg)
+![Agent Proposal](docs/imgs/proposal.jpeg)
 _[Image 2: Specialized Subagents' Findings, Partitioned by Type]_
 
 
@@ -32,7 +34,7 @@ Two guardrails sit on the agents that touch untrusted repo content: prompt-injec
 
 Findings appear in the web app under the submitted repository's specific tab, and information can either be copied as an ```.md``` file or downloaded as a PDF file.
 
-![PDR Reporting](docs/imgs/pdfreporting.jpeg)
+![PDF Reporting](docs/imgs/pdfreporting.jpeg)
 _[Image 4: PDF Reporting Feature]_
 
 ### Concepts Implemented
