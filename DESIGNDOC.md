@@ -2,7 +2,7 @@
 
 - **Author:** myrmlbst on GitHub
 - **Status:** Draft
-- **Last updated:** 2026-09-08
+- **Last updated:** 2026-09-30
 
 ## 1. Summary
 
@@ -133,7 +133,7 @@ golden-repo-01/
 
 Run the full pipeline against each golden repo and score precision/recall of the findings the Security/Cloud agents actually produce against the expected list. Run this suite in CI on every prompt or pipeline change — it's the regression test for prompt drift, which is the failure mode this project is most exposed to (a prompt tweak silently makes an agent worse). The token/cost/latency tracking from the README's observability section is a separate concern — that's telemetry on a real run, not a pass/fail eval signal.
 
-**Status: implemented, not yet run to completion.** `agents/eval/` — 5 hand-crafted fixtures (`golden-repos/*/files/`) with a hand-labeled `expected-findings.json` each (JSON instead of the YAML sketched above — no YAML parser dependency existed, JSON is equally hand-labeled). `eval/run.ts` scaffolds each fixture into a real temp git repo (`eval/lib/scaffoldRepo.ts`), runs `code_agent` → `{cloud_agent, security_agent}` directly — bypassing the orchestrator's LLM planning step, since the eval wants fixed, deterministic agent selection, not whatever a given run's planner chooses — and scores the collected findings against the expected list with an LLM judge (`eval/lib/judge.ts`, semantic match via a forced tool call, not exact string match). `npm run eval`. The scaffolding/clone/index infra is verified working (confirmed live, up through a real Claude call), but no run has finished with real recorded scores yet — not wired into CI either, since there's no CI workflow yet (§ 10).
+**Status: implemented and run to completion.** `agents/eval/` — 5 hand-crafted fixtures (`golden-repos/*/files/`) with a hand-labeled `expected-findings.json` each (JSON instead of the YAML sketched above — no YAML parser dependency existed, JSON is equally hand-labeled). `eval/run.ts` scaffolds each fixture into a real temp git repo (`eval/lib/scaffoldRepo.ts`), runs `code_agent` → `{cloud_agent, security_agent}` directly — bypassing the orchestrator's LLM planning step, since the eval wants fixed, deterministic agent selection, not whatever a given run's planner chooses — and scores the collected findings against the expected list with an LLM judge (`eval/lib/judge.ts`, semantic match via a forced tool call, not exact string match). `npm run eval`. A full scored run has completed against real recorded scores — not wired into CI yet, since there's no CI workflow yet (§ 10).
 
 
 ## 9. Build Order
@@ -145,7 +145,7 @@ Run the full pipeline against each golden repo and score precision/recall of the
 3. **Productization.** Auth, API keys, Postgres persistence, rate limiting/quotas, Redis caching.
    - Status: done. Postgres persistence of analysis results specifically landed via `supabase/migrations/0004_analysis_results.sql` + the worker — `analyses.proposal`/`review_approved`, `analysis_runs`, `findings` all populated on a real run. Auth, API keys, rate limiting/quotas (§ 5), and Redis caching (§ 6) were already done and verified live.
 4. **Quality layer.** Guardrails (injection test + redaction), golden-repo eval suite wired into CI.
-   - Status: partial. Redaction and the injection-resistance guardrail are both fully done, including a passing test for each (§ 7). The eval suite exists but hasn't completed a scored run yet, and there's no CI to wire it into (§ 10 has no CI-workflow step — worth adding).
+   - Status: partial. Redaction and the injection-resistance guardrail are both fully done, including a passing test for each (§ 7). The eval suite has completed a scored run; it's still not wired into CI (§ 10 has no CI-workflow step — worth adding).
 5. **Deployment.** Containerize and deploy for real; wire up the trace/cost dashboard.
    - Status: partial. Containerization/deployment hasn't started (scope changed to no deployment). The trace/cost side is done: `GET /v1/analyses/{id}/trace` returns per-agent timing, `tokens_used`, `cost_usd` and `retrieval_count`, failed agents are recorded with `status: "failed"` + `error` (also when the whole analysis fails), and the dashboard's "Usage & cost" table consumes it.
 6. **Stretch.** GitHub PR webhook + auto-comment loop; MCP servers in place of direct SDK calls.
